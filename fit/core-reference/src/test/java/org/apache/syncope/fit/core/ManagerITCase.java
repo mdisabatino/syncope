@@ -71,7 +71,7 @@ public class ManagerITCase extends AbstractITCase {
         assertTrue(matching.getResult().stream().anyMatch(user -> managedKey.equals(user.getKey())));
 
         // check manager realms
-        SyncopeClient managerClient = CLIENT_FACTORY.create(managerUsername, "password123");
+        SyncopeClient managerClient = CLIENT_FACTORY.create(managerUsername, DEFAULT_PASSWORD);
         Self self = managerClient.self();
         Set<String> managerRealms = self.entitlements().get(IdRepoEntitlement.USER_SEARCH);
         assertEquals(1, managerRealms.size());
@@ -134,10 +134,10 @@ public class ManagerITCase extends AbstractITCase {
         assertNotNull(manager);
 
         GroupCR groupCR = GroupITCase.getSample("uManagerTestGroup");
-        groupCR.setUManager(manager.getKey());
+        groupCR.setuManager(manager.getKey());
         GroupTO group = createGroup(groupCR).getEntity();
         assertNotNull(group);
-        assertEquals(manager.getKey(), group.getUManager());
+        assertEquals(manager.getKey(), group.getuManager());
 
         UserCR managedCR = UserITCase.getUniqueSample("uManagerTest@syncope.org");
         managedCR.getMemberships().add(new MembershipTO.Builder(group.getKey()).build());
@@ -178,9 +178,9 @@ public class ManagerITCase extends AbstractITCase {
         assertNotNull(manager);
 
         UserCR managedCR = UserITCase.getUniqueSample("uManagerTest@syncope.org");
-        managedCR.setGManager(group.getKey());
+        managedCR.setgManager(group.getKey());
         UserTO managed = createUser(managedCR).getEntity();
-        assertEquals(group.getKey(), managed.getGManager());
+        assertEquals(group.getKey(), managed.getgManager());
 
         // check
         check(

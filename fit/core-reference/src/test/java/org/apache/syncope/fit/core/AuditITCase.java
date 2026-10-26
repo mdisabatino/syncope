@@ -42,7 +42,6 @@ import java.util.Properties;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
-import org.apache.commons.io.IOUtils;
 import org.apache.commons.lang3.SerializationUtils;
 import org.apache.syncope.client.lib.SyncopeClient;
 import org.apache.syncope.common.lib.Attr;
@@ -161,6 +160,159 @@ public class AuditITCase extends AbstractITCase {
         AuditEventTO entry = queryWithFailure(query, MAX_WAIT_SECONDS);
         assertNotNull(entry);
         USER_SERVICE.delete(userTO.getKey());
+    }
+
+    @Test
+    public void findByWho() {
+        UserTO userTO = createUser(UserITCase.getUniqueSample("audit-who@syncope.org")).getEntity();
+        assertNotNull(userTO.getKey());
+
+        // exact match on the author of the just-created user's create event
+        AuditQuery exact = new AuditQuery.Builder().
+                entityKey(userTO.getKey()).
+                who(ADMIN_UNAME).
+                type(OpEvent.CategoryType.LOGIC).
+                category(UserLogic.class.getSimpleName()).
+                op("create").
+                outcome(OpEvent.Outcome.SUCCESS).
+                build();
+        assertFalse(query(exact, MAX_WAIT_SECONDS).isEmpty());
+
+        // multiple who values are OR'ed: admin still matches alongside an unrelated author
+        AuditQuery multiple = new AuditQuery.Builder().
+                entityKey(userTO.getKey()).
+                who(ADMIN_UNAME).
+                who("non-existent-" + UUID.randomUUID()).
+                type(OpEvent.CategoryType.LOGIC).
+                category(UserLogic.class.getSimpleName()).
+                op("create").
+                outcome(OpEvent.Outcome.SUCCESS).
+                build();
+        assertFalse(AUDIT_SERVICE.search(multiple).getResult().isEmpty());
+
+        // the who filter excludes non-matching authors
+        AuditQuery noMatch = new AuditQuery.Builder().
+                entityKey(userTO.getKey()).
+                who("non-existent-" + UUID.randomUUID()).
+                type(OpEvent.CategoryType.LOGIC).
+                category(UserLogic.class.getSimpleName()).
+                op("create").
+                outcome(OpEvent.Outcome.SUCCESS).
+                build();
+        assertTrue(AUDIT_SERVICE.search(noMatch).getResult().isEmpty());
+
+        USER_SERVICE.delete(userTO.getKey());
+    }
+
+    @Test
+    public void findByWhoIsExactMatch() {
+        UserTO userTO = createUser(UserITCase.getUniqueSample("audit-who-exact@syncope.org")).getEntity();
+        assertNotNull(userTO.getKey());
+
+        // make sure the create event is there (matched exactly by the admin author)
+        AuditQuery exact = new AuditQuery.Builder().
+                entityKey(userTO.getKey()).
+                who(ADMIN_UNAME).
+                type(OpEvent.CategoryType.LOGIC).
+                category(UserLogic.class.getSimpleName()).
+                op("create").
+                outcome(OpEvent.Outcome.SUCCESS).
+                build();
+        assertFalse(query(exact, MAX_WAIT_SECONDS).isEmpty());
+
+        // who matches exactly: a '*' is treated literally, not as a wildcard
+        AuditQuery wildcard = new AuditQuery.Builder().
+                entityKey(userTO.getKey()).
+                who(ADMIN_UNAME.substring(0, 3) + '*').
+                type(OpEvent.CategoryType.LOGIC).
+                category(UserLogic.class.getSimpleName()).
+                op("create").
+                outcome(OpEvent.Outcome.SUCCESS).
+                build();
+        assertTrue(AUDIT_SERVICE.search(wildcard).getResult().isEmpty());
+
+        USER_SERVICE.delete(userTO.getKey());
+    }
+
+    @Test
+    public void findByUsername() {
+        UserTO userTO = createUser(UserITCase.getUniqueSample("audit-username@syncope.org")).getEntity();
+        assertNotNull(userTO.getKey());
+
+        // exact match on the username whose payload was logged for the create event
+        AuditQuery exact = new AuditQuery.Builder().
+                username(userTO.getUsername()).
+                type(OpEvent.CategoryType.LOGIC).
+                category(UserLogic.class.getSimpleName()).
+                op("create").
+                outcome(OpEvent.Outcome.SUCCESS).
+                build();
+        List<AuditEventTO> exactResult = query(exact, MAX_WAIT_SECONDS);
+        assertFalse(exactResult.isEmpty());
+        // the matched event genuinely carries this username in its payload (not matched by chance)
+        assertTrue(exactResult.stream().anyMatch(event -> (event.getOutput() != null
+                && event.getOutput().contains("\"username\":\"" + userTO.getUsername() + "\""))
+                || (event.getBefore() != null
+                && event.getBefore().contains("\"username\":\"" + userTO.getUsername() + "\""))));
+
+        // multiple username values are OR'ed
+        AuditQuery multiple = new AuditQuery.Builder().
+                username(userTO.getUsername()).
+                username("non-existent-" + UUID.randomUUID()).
+                type(OpEvent.CategoryType.LOGIC).
+                category(UserLogic.class.getSimpleName()).
+                op("create").
+                outcome(OpEvent.Outcome.SUCCESS).
+                build();
+        assertFalse(AUDIT_SERVICE.search(multiple).getResult().isEmpty());
+
+        // a non-matching username excludes the event
+        AuditQuery noMatch = new AuditQuery.Builder().
+                username("non-existent-" + UUID.randomUUID()).
+                type(OpEvent.CategoryType.LOGIC).
+                category(UserLogic.class.getSimpleName()).
+                op("create").
+                outcome(OpEvent.Outcome.SUCCESS).
+                build();
+        assertTrue(AUDIT_SERVICE.search(noMatch).getResult().isEmpty());
+
+        // the match is exact: a strict prefix of the username does not match
+        AuditQuery prefix = new AuditQuery.Builder().
+                username(userTO.getUsername().substring(0, userTO.getUsername().length() - 1)).
+                type(OpEvent.CategoryType.LOGIC).
+                category(UserLogic.class.getSimpleName()).
+                op("create").
+                outcome(OpEvent.Outcome.SUCCESS).
+                build();
+        assertTrue(AUDIT_SERVICE.search(prefix).getResult().isEmpty());
+
+        USER_SERVICE.delete(userTO.getKey());
+    }
+
+    @Test
+    public void findDeletedUserByUsername() {
+        UserTO userTO = createUser(UserITCase.getUniqueSample("audit-username-deleted@syncope.org")).getEntity();
+        String username = userTO.getUsername();
+        assertNotNull(userTO.getKey());
+
+        AuditQuery deleteQuery = new AuditQuery.Builder().
+                username(username).
+                type(OpEvent.CategoryType.LOGIC).
+                category(UserLogic.class.getSimpleName()).
+                op("delete").
+                outcome(OpEvent.Outcome.SUCCESS).
+                build();
+        try {
+            AUDIT_SERVICE.setConf(buildAuditConf("[LOGIC]:[UserLogic]:[]:[delete]:[SUCCESS]", true));
+
+            USER_SERVICE.delete(userTO.getKey());
+
+            // the user is gone (its key can no longer be resolved), but the delete event's "before"
+            // snapshot still carries the username, so it remains searchable by username
+            assertFalse(query(deleteQuery, MAX_WAIT_SECONDS).isEmpty());
+        } finally {
+            AUDIT_SERVICE.setConf(buildAuditConf("[LOGIC]:[UserLogic]:[]:[delete]:[SUCCESS]", false));
+        }
     }
 
     @Test
@@ -645,8 +797,9 @@ public class AuditITCase extends AbstractITCase {
             logicActions.setKey("CustomAuditLogicActions");
             logicActions.setEngine(ImplementationEngine.GROOVY);
             logicActions.setType(IdRepoImplementationType.LOGIC_ACTIONS);
-            logicActions.setBody(IOUtils.toString(
-                    getClass().getResourceAsStream("/CustomAuditLogicActions.groovy"), StandardCharsets.UTF_8));
+            logicActions.setBody(new String(
+                    getClass().getResourceAsStream("/CustomAuditLogicActions.groovy").readAllBytes(),
+                    StandardCharsets.UTF_8));
             Response response = IMPLEMENTATION_SERVICE.create(logicActions);
             logicActions = IMPLEMENTATION_SERVICE.read(
                     logicActions.getType(), response.getHeaderString(RESTHeaders.RESOURCE_KEY));

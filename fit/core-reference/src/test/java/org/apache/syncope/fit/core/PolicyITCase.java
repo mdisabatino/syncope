@@ -22,6 +22,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 
@@ -30,7 +31,6 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Set;
-import org.apache.commons.io.IOUtils;
 import org.apache.commons.lang3.SerializationUtils;
 import org.apache.syncope.common.lib.SyncopeClientException;
 import org.apache.syncope.common.lib.policy.AccessPolicyTO;
@@ -48,6 +48,7 @@ import org.apache.syncope.common.lib.policy.PasswordPolicyTO;
 import org.apache.syncope.common.lib.policy.PropagationPolicyTO;
 import org.apache.syncope.common.lib.policy.PushPolicyTO;
 import org.apache.syncope.common.lib.policy.TicketExpirationPolicyTO;
+import org.apache.syncope.common.lib.request.UserCR;
 import org.apache.syncope.common.lib.to.ImplementationTO;
 import org.apache.syncope.common.lib.to.ResourceTO;
 import org.apache.syncope.common.lib.types.AnyTypeKind;
@@ -75,8 +76,8 @@ public class PolicyITCase extends AbstractITCase {
                 corrRule.setKey("TestPullRule");
                 corrRule.setEngine(ImplementationEngine.GROOVY);
                 corrRule.setType(IdMImplementationType.INBOUND_CORRELATION_RULE);
-                corrRule.setBody(IOUtils.toString(
-                        getClass().getResourceAsStream("/TestPullRule.groovy"), StandardCharsets.UTF_8));
+                corrRule.setBody(new String(
+                        getClass().getResourceAsStream("/TestPullRule.groovy").readAllBytes(), StandardCharsets.UTF_8));
                 Response response = IMPLEMENTATION_SERVICE.create(corrRule);
                 corrRule = IMPLEMENTATION_SERVICE.read(
                         corrRule.getType(), response.getHeaderString(RESTHeaders.RESOURCE_KEY));
@@ -102,8 +103,8 @@ public class PolicyITCase extends AbstractITCase {
                 corrRule.setKey("TestPushRule");
                 corrRule.setEngine(ImplementationEngine.GROOVY);
                 corrRule.setType(IdMImplementationType.PUSH_CORRELATION_RULE);
-                corrRule.setBody(IOUtils.toString(
-                        getClass().getResourceAsStream("/TestPushRule.groovy"), StandardCharsets.UTF_8));
+                corrRule.setBody(new String(
+                        getClass().getResourceAsStream("/TestPushRule.groovy").readAllBytes(), StandardCharsets.UTF_8));
                 Response response = IMPLEMENTATION_SERVICE.create(corrRule);
                 corrRule = IMPLEMENTATION_SERVICE.read(
                         corrRule.getType(), response.getHeaderString(RESTHeaders.RESOURCE_KEY));
@@ -409,7 +410,7 @@ public class PolicyITCase extends AbstractITCase {
     @Test
     public void getInboundCorrelationRuleJavaClasses() {
         Set<String> classes = ANONYMOUS_CLIENT.platform().
-                getJavaImplInfo(IdMImplementationType.INBOUND_CORRELATION_RULE).get().getClasses();
+                getJavaImplInfo(IdMImplementationType.INBOUND_CORRELATION_RULE).get().classes();
         assertEquals(1, classes.size());
         assertEquals(DummyInboundCorrelationRule.class.getName(), classes.iterator().next());
     }
@@ -417,7 +418,7 @@ public class PolicyITCase extends AbstractITCase {
     @Test
     public void getPushCorrelationRuleJavaClasses() {
         Set<String> classes = ANONYMOUS_CLIENT.platform().
-                getJavaImplInfo(IdMImplementationType.PUSH_CORRELATION_RULE).get().getClasses();
+                getJavaImplInfo(IdMImplementationType.PUSH_CORRELATION_RULE).get().classes();
         assertEquals(1, classes.size());
         assertEquals(DummyPushCorrelationRule.class.getName(), classes.iterator().next());
     }
@@ -481,6 +482,40 @@ public class PolicyITCase extends AbstractITCase {
         } finally {
             ldap.setAccountPolicy(existingAP);
             RESOURCE_SERVICE.update(ldap);
+        }
+    }
+
+    @Test
+    public void issueSYNCOPE1979() {
+        // 1. Set a new password policy with not permitted schemas and not permitted words
+        ImplementationTO originalRule =
+                IMPLEMENTATION_SERVICE.read(IdRepoImplementationType.PASSWORD_RULE, "DefaultPasswordRuleConf2");
+        DefaultPasswordRuleConf defaultPasswordRuleConf =
+                POJOHelper.deserialize(originalRule.getBody(), DefaultPasswordRuleConf.class);
+        defaultPasswordRuleConf.getSchemasNotPermitted().add("firstname");
+        defaultPasswordRuleConf.getSchemasNotPermitted().add("surname");
+        defaultPasswordRuleConf.getSchemasNotPermitted().add("changePwdDate");
+        defaultPasswordRuleConf.setNotPermittedAsSubstrings(true);
+        originalRule.setBody(POJOHelper.serialize(defaultPasswordRuleConf));
+        IMPLEMENTATION_SERVICE.update(originalRule);
+        try {
+            UserCR userCR = UserITCase.getUniqueSample("syncope1979@syncope.apache.org");
+            // 1. set password with not permitted word inside
+            SyncopeClientException sce = assertThrows(SyncopeClientException.class, () -> {
+                userCR.setPassword("Notpermitted12345!");
+                createUser(userCR);
+            });
+            assertTrue(sce.getElements().iterator().next().startsWith("InvalidPassword"));
+
+            // 2. set password with not permitted schema inside
+            sce = assertThrows(SyncopeClientException.class, () -> {
+                userCR.setPassword(userCR.getPlainAttr("firstname").get().getValues().getFirst() + "12345!");
+                createUser(userCR);
+            });
+            assertTrue(sce.getElements().iterator().next().startsWith("InvalidPassword"));
+        } finally {
+            // restore old password policy
+            IMPLEMENTATION_SERVICE.update(originalRule);
         }
     }
 }

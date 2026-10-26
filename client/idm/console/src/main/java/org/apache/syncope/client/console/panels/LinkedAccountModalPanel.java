@@ -160,7 +160,6 @@ public class LinkedAccountModalPanel extends Panel implements ModalPanel {
             }
 
             @Override
-            @SuppressWarnings("unchecked")
             protected void customActionOnFinishCallback(final AjaxRequestTarget target) {
                 checkAddButton(model.getObject().getRealm());
 
@@ -298,7 +297,7 @@ public class LinkedAccountModalPanel extends Panel implements ModalPanel {
                         new ActionLinksTogglePanel.ActionLinkToggleCloseEventPayload(target));
             }
         }, ActionLink.ActionType.RECONCILIATION_PUSH,
-                String.format("%s,%s", IdRepoEntitlement.USER_READ, IdRepoEntitlement.TASK_EXECUTE));
+                "%s,%s".formatted(IdRepoEntitlement.USER_READ, IdRepoEntitlement.TASK_EXECUTE));
 
         builder.addAction(new ActionLink<>() {
 
@@ -324,7 +323,7 @@ public class LinkedAccountModalPanel extends Panel implements ModalPanel {
                         new ActionLinksTogglePanel.ActionLinkToggleCloseEventPayload(target));
             }
         }, ActionLink.ActionType.RECONCILIATION_PULL,
-                String.format("%s,%s", IdRepoEntitlement.USER_READ, IdRepoEntitlement.TASK_EXECUTE));
+                "%s,%s".formatted(IdRepoEntitlement.USER_READ, IdRepoEntitlement.TASK_EXECUTE));
 
         if (!reconciliationOnly) {
             builder.addAction(new ActionLink<>() {

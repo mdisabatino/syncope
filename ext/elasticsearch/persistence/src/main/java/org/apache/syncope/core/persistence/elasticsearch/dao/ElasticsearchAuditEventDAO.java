@@ -35,11 +35,13 @@ import java.io.IOException;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 import java.util.stream.Stream;
 import org.apache.syncope.common.lib.to.AuditEventTO;
 import org.apache.syncope.common.lib.types.OpEvent;
 import org.apache.syncope.core.persistence.api.dao.AuditEventDAO;
 import org.apache.syncope.core.persistence.api.entity.AuditEvent;
+import org.apache.syncope.core.persistence.common.dao.AbstractAuditEventDAO;
 import org.apache.syncope.core.spring.security.AuthContextUtils;
 import org.apache.syncope.ext.elasticsearch.client.ElasticsearchIndexManager;
 import org.apache.syncope.ext.elasticsearch.client.ElasticsearchUtils;
@@ -49,7 +51,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.util.CollectionUtils;
 
-public class ElasticsearchAuditEventDAO implements AuditEventDAO {
+public class ElasticsearchAuditEventDAO extends AbstractAuditEventDAO implements AuditEventDAO {
 
     protected static final Logger LOG = LoggerFactory.getLogger(AuditEventDAO.class);
 
@@ -81,6 +83,8 @@ public class ElasticsearchAuditEventDAO implements AuditEventDAO {
 
     protected Query getQuery(
             final String entityKey,
+            final Set<String> username,
+            final Set<String> who,
             final OpEvent.CategoryType type,
             final String category,
             final String subcategory,
@@ -92,6 +96,8 @@ public class ElasticsearchAuditEventDAO implements AuditEventDAO {
         List<Query> queries = new ArrayList<>();
 
         if (entityKey != null) {
+            checkEntityKey(entityKey);
+
             queries.add(new Query.Builder().
                     multiMatch(QueryBuilders.multiMatch().
                             fields("before", "inputs", "output", "throwable").
@@ -99,9 +105,28 @@ public class ElasticsearchAuditEventDAO implements AuditEventDAO {
                             query("\"key\":\"" + entityKey + "\"").build()).build());
         }
 
+        if (!CollectionUtils.isEmpty(username)) {
+            List<Query> usernameQueries = username.stream().map(value -> new Query.Builder().
+                    multiMatch(QueryBuilders.multiMatch().
+                            fields("before", "inputs", "output", "throwable").
+                            type(TextQueryType.Phrase).
+                            query("\"username\":\"" + value + "\"").build()).build()).
+                    toList();
+            queries.add(new Query.Builder().
+                    bool(QueryBuilders.bool().should(usernameQueries).minimumShouldMatch("1").build()).build());
+        }
+
+        if (!CollectionUtils.isEmpty(who)) {
+            List<Query> whoQueries = who.stream().map(value -> new Query.Builder().
+                    term(QueryBuilders.term().field("who").value(value).build()).build()).
+                    toList();
+            queries.add(new Query.Builder().
+                    bool(QueryBuilders.bool().should(whoQueries).minimumShouldMatch("1").build()).build());
+        }
+
         queries.add(new Query.Builder().regexp(QueryBuilders.regexp().
                 field("opEvent").
-                value(OpEvent.toString(type, category, subcategory, op, outcome).
+                value(toOpEvent(type, category, subcategory, op, outcome).
                         replace("[]", "[.*]").
                         replace("[", "\\[").
                         replace("]", "\\]")).build()).
@@ -127,6 +152,8 @@ public class ElasticsearchAuditEventDAO implements AuditEventDAO {
     @Override
     public long count(
             final String entityKey,
+            final Set<String> username,
+            final Set<String> who,
             final OpEvent.CategoryType type,
             final String category,
             final String subcategory,
@@ -137,7 +164,7 @@ public class ElasticsearchAuditEventDAO implements AuditEventDAO {
 
         CountRequest request = new CountRequest.Builder().
                 index(ElasticsearchUtils.getAuditIndex(AuthContextUtils.getDomain())).
-                query(getQuery(entityKey, type, category, subcategory, op, outcome, before, after)).
+                query(getQuery(entityKey, username, who, type, category, subcategory, op, outcome, before, after)).
                 build();
         LOG.debug("Count request: {}", request);
 
@@ -161,6 +188,8 @@ public class ElasticsearchAuditEventDAO implements AuditEventDAO {
     @Override
     public List<AuditEventTO> search(
             final String entityKey,
+            final Set<String> username,
+            final Set<String> who,
             final OpEvent.CategoryType type,
             final String category,
             final String subcategory,
@@ -173,7 +202,7 @@ public class ElasticsearchAuditEventDAO implements AuditEventDAO {
         SearchRequest request = new SearchRequest.Builder().
                 index(ElasticsearchUtils.getAuditIndex(AuthContextUtils.getDomain())).
                 searchType(SearchType.QueryThenFetch).
-                query(getQuery(entityKey, type, category, subcategory, op, outcome, before, after)).
+                query(getQuery(entityKey, username, who, type, category, subcategory, op, outcome, before, after)).
                 from(pageable.isUnpaged() ? 0 : pageable.getPageSize() * pageable.getPageNumber()).
                 size(pageable.isUnpaged() ? indexMaxResultWindow : pageable.getPageSize()).
                 sort(sortBuilders(pageable.getSort().get())).

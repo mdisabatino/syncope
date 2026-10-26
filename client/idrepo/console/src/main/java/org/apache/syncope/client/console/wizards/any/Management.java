@@ -117,7 +117,7 @@ public class Management extends WizardStep implements ICondition {
         setTitleModel(new ResourceModel("manager"));
         this.wrapper = anyWrapper;
 
-        isGManager = Model.of(anyWrapper.getInnerObject().getGManager() != null);
+        isGManager = Model.of(anyWrapper.getInnerObject().getgManager() != null);
 
         BootstrapToggleConfig config = new BootstrapToggleConfig().
                 withOnStyle(BootstrapToggleConfig.Style.info).
@@ -213,36 +213,34 @@ public class Management extends WizardStep implements ICondition {
 
             @Override
             public String getObject() {
-                if (anyWrapper.getInnerObject().getUManager() == null) {
+                if (anyWrapper.getInnerObject().getuManager() == null) {
                     return StringUtils.EMPTY;
                 }
 
-                UserTO userTO = userRestClient.read(anyWrapper.getInnerObject().getUManager());
+                UserTO userTO = userRestClient.read(anyWrapper.getInnerObject().getuManager());
                 if (userTO == null) {
                     return StringUtils.EMPTY;
                 }
 
-                return String.format("[%s] %s", userTO.getKey(), userTO.getUsername());
+                return "[%s] %s".formatted(userTO.getKey(), userTO.getUsername());
             }
 
             @Override
             public void setObject(final String object) {
                 if (StringUtils.isBlank(object)) {
-                    anyWrapper.getInnerObject().setUManager(null);
+                    anyWrapper.getInnerObject().setuManager(null);
                 } else {
                     Matcher matcher = manager.matcher(object);
                     if (matcher.matches()) {
-                        anyWrapper.getInnerObject().setUManager(matcher.group(1));
+                        anyWrapper.getInnerObject().setuManager(matcher.group(1));
                     }
                 }
             }
         }, false);
-        uManager.setPlaceholder("uManager");
-        uManager.hideLabel();
-        uManager.setReadOnly(true).setOutputMarkupId(true);
-        userSearchFragment.add(uManager);
+        userSearchFragment.add(uManager.setPlaceholder("uManager").hideLabel().
+                setReadOnly(true).setOutputMarkupId(true));
 
-        IndicatingAjaxLink<Void> uManagerReset = new IndicatingAjaxLink<>("uManagerReset") {
+        userSearchFragment.add(new IndicatingAjaxLink<>("uManagerReset") {
 
             private static final long serialVersionUID = -7978723352517770644L;
 
@@ -255,9 +253,7 @@ public class Management extends WizardStep implements ICondition {
             public String getAjaxIndicatorMarkupId() {
                 return Constants.VEIL_INDICATOR_MARKUP_ID;
             }
-
-        };
-        userSearchFragment.add(uManagerReset);
+        });
 
         AjaxTextFieldPanel gManager = new AjaxTextFieldPanel(
                 "gManager", "gManager", new PropertyModel<>(anyWrapper.getInnerObject(), "gManager") {
@@ -266,14 +262,14 @@ public class Management extends WizardStep implements ICondition {
 
             @Override
             public String getObject() {
-                if (anyWrapper.getInnerObject().getGManager() == null) {
+                if (anyWrapper.getInnerObject().getgManager() == null) {
                     return StringUtils.EMPTY;
                 } else {
-                    GroupTO groupTO = groupRestClient.read(anyWrapper.getInnerObject().getGManager());
+                    GroupTO groupTO = groupRestClient.read(anyWrapper.getInnerObject().getgManager());
                     if (groupTO == null) {
                         return StringUtils.EMPTY;
                     } else {
-                        return String.format("[%s] %s", groupTO.getKey(), groupTO.getName());
+                        return "[%s] %s".formatted(groupTO.getKey(), groupTO.getName());
                     }
                 }
             }
@@ -281,21 +277,19 @@ public class Management extends WizardStep implements ICondition {
             @Override
             public void setObject(final String object) {
                 if (StringUtils.isBlank(object)) {
-                    anyWrapper.getInnerObject().setGManager(null);
+                    anyWrapper.getInnerObject().setgManager(null);
                 } else {
                     final Matcher matcher = manager.matcher(object);
                     if (matcher.matches()) {
-                        anyWrapper.getInnerObject().setGManager(matcher.group(1));
+                        anyWrapper.getInnerObject().setgManager(matcher.group(1));
                     }
                 }
             }
         }, false);
-        gManager.setPlaceholder("gManager");
-        gManager.hideLabel();
-        gManager.setReadOnly(true).setOutputMarkupId(true);
-        groupSearchFragment.add(gManager);
+        groupSearchFragment.add(gManager.setPlaceholder("gManager").hideLabel().
+                setReadOnly(true).setOutputMarkupId(true));
 
-        IndicatingAjaxLink<Void> gManagerReset = new IndicatingAjaxLink<>("gManagerReset") {
+        groupSearchFragment.add(new IndicatingAjaxLink<>("gManagerReset") {
 
             private static final long serialVersionUID = -7978723352517770644L;
 
@@ -309,8 +303,7 @@ public class Management extends WizardStep implements ICondition {
                 return Constants.VEIL_INDICATOR_MARKUP_ID;
             }
 
-        };
-        groupSearchFragment.add(gManagerReset);
+        });
     }
 
     @Override
@@ -329,14 +322,14 @@ public class Management extends WizardStep implements ICondition {
         } else if (event.getPayload() instanceof final AnySelectionDirectoryPanel.ItemSelection<?> itemSelection) {
             AnyTO sel = itemSelection.getSelection();
             if (sel == null) {
-                wrapper.getInnerObject().setUManager(null);
-                wrapper.getInnerObject().setGManager(null);
+                wrapper.getInnerObject().setuManager(null);
+                wrapper.getInnerObject().setgManager(null);
             } else if (sel instanceof UserTO) {
-                wrapper.getInnerObject().setUManager(sel.getKey());
-                wrapper.getInnerObject().setGManager(null);
+                wrapper.getInnerObject().setuManager(sel.getKey());
+                wrapper.getInnerObject().setgManager(null);
             } else if (sel instanceof GroupTO) {
-                wrapper.getInnerObject().setUManager(null);
-                wrapper.getInnerObject().setGManager(sel.getKey());
+                wrapper.getInnerObject().setuManager(null);
+                wrapper.getInnerObject().setgManager(sel.getKey());
             }
             itemSelection.getTarget().add(managerContainer);
         } else {

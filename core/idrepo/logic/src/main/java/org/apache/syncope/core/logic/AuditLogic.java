@@ -275,6 +275,8 @@ public class AuditLogic extends AbstractTransactionalLogic<AuditConfTO> {
     @Transactional(readOnly = true)
     public Page<AuditEventTO> search(
             final String entityKey,
+            final Set<String> username,
+            final Set<String> who,
             final OpEvent.CategoryType type,
             final String category,
             final String subcategory,
@@ -284,10 +286,11 @@ public class AuditLogic extends AbstractTransactionalLogic<AuditConfTO> {
             final OffsetDateTime after,
             final Pageable pageable) {
 
-        long count = auditEventDAO.count(entityKey, type, category, subcategory, op, result, before, after);
+        long count = auditEventDAO.count(
+                entityKey, username, who, type, category, subcategory, op, result, before, after);
 
         List<AuditEventTO> matching = auditEventDAO.search(
-                entityKey, type, category, subcategory, op, result, before, after, pageable);
+                entityKey, username, who, type, category, subcategory, op, result, before, after, pageable);
 
         return new SyncopePage<>(matching, pageable, count);
     }

@@ -18,8 +18,17 @@
  */
 package org.apache.syncope.core.logic;
 
+import dev.samstevens.totp.code.CodeVerifier;
+import dev.samstevens.totp.code.HashingAlgorithm;
+import dev.samstevens.totp.qr.QrGenerator;
+import dev.samstevens.totp.qr.ZxingPngQrGenerator;
+import dev.samstevens.totp.recovery.RecoveryCodeGenerator;
+import dev.samstevens.totp.secret.DefaultSecretGenerator;
+import dev.samstevens.totp.secret.SecretGenerator;
 import jakarta.validation.Validator;
+import javax.cache.Cache;
 import org.apache.syncope.common.keymaster.client.api.ConfParamOps;
+import org.apache.syncope.common.keymaster.client.api.DomainOps;
 import org.apache.syncope.core.logic.init.ClassPathScanImplementationLookup;
 import org.apache.syncope.core.logic.init.EntitlementAccessor;
 import org.apache.syncope.core.logic.init.IdRepoEntitlementLoader;
@@ -93,8 +102,11 @@ import org.apache.syncope.core.provisioning.api.propagation.PropagationTaskExecu
 import org.apache.syncope.core.provisioning.api.rules.RuleProvider;
 import org.apache.syncope.core.provisioning.java.job.SyncopeTaskScheduler;
 import org.apache.syncope.core.spring.security.SecurityProperties;
+import org.apache.syncope.core.spring.security.throttle.PasswordResetRequestThrottler;
+import org.apache.syncope.core.spring.security.throttle.ThrottlerAttempts;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.context.annotation.Bean;
@@ -153,7 +165,7 @@ public class IdRepoLogicContext {
 
     @ConditionalOnMissingBean
     @Bean
-    public AnyObjectLogic anyObjectLogic(
+    public AnyObjectLogicOp anyObjectLogic(
             final RealmSearchDAO realmSearchDAO,
             final AnyTypeDAO anyTypeDAO,
             final TemplateUtils templateUtils,
@@ -242,7 +254,7 @@ public class IdRepoLogicContext {
 
     @ConditionalOnMissingBean
     @Bean
-    public GroupLogic groupLogic(
+    public GroupLogicOp groupLogic(
             final RealmSearchDAO realmSearchDAO,
             final AnyTypeDAO anyTypeDAO,
             final TemplateUtils templateUtils,
@@ -433,7 +445,6 @@ public class IdRepoLogicContext {
             final AnySearchDAO anySearchDAO,
             final GroupDataBinder groupDataBinder,
             final RelationshipTypeDataBinder relationshipTypeDataBinder,
-            final ConfParamOps confParamOps,
             final ContentExporter exporter) {
 
         return new SyncopeLogic(
@@ -444,7 +455,6 @@ public class IdRepoLogicContext {
                 anySearchDAO,
                 groupDataBinder,
                 relationshipTypeDataBinder,
-                confParamOps,
                 exporter);
     }
 
@@ -479,38 +489,108 @@ public class IdRepoLogicContext {
 
     @ConditionalOnMissingBean
     @Bean
-    public UserLogic userLogic(
+    public UserLogicOp userLogic(
             final RealmSearchDAO realmSearchDAO,
             final AnyTypeDAO anyTypeDAO,
             final TemplateUtils templateUtils,
             final UserDAO userDAO,
-            final GroupDAO groupDAO,
-            final AnySearchDAO anySearchDAO,
-            final ExternalResourceDAO resourceDAO,
-            final AccessTokenDAO accessTokenDAO,
-            final DelegationDAO delegationDAO,
-            final ConfParamOps confParamOps,
             final UserDataBinder binder,
             final UserProvisioningManager provisioningManager,
-            final SyncopeLogic syncopeLogic,
-            final RuleProvider ruleProvider,
-            final EncryptorManager encryptorManager) {
+            final EncryptorManager encryptorManager,
+            final ConfParamOps confParamOps,
+            final GroupDAO groupDAO,
+            final AnySearchDAO searchDAO) {
 
         return new UserLogic(
                 realmSearchDAO,
                 anyTypeDAO,
                 templateUtils,
-                userDAO,
-                groupDAO,
-                anySearchDAO,
-                resourceDAO,
-                accessTokenDAO,
-                delegationDAO,
+                userDAO, binder,
+                provisioningManager,
+                encryptorManager,
                 confParamOps,
+                groupDAO,
+                searchDAO);
+    }
+
+    @ConditionalOnMissingBean
+    @Bean
+    public UserSelfLogic userSelfLogic(
+            final RealmSearchDAO realmSearchDAO,
+            final AnyTypeDAO anyTypeDAO,
+            final TemplateUtils templateUtils,
+            final UserDAO userDAO,
+            final UserDataBinder binder,
+            final UserProvisioningManager provisioningManager,
+            final EncryptorManager encryptorManager,
+            final ConfParamOps confParamOps,
+            final DelegationDAO delegationDAO,
+            final AccessTokenDAO accessTokenDAO,
+            final ExternalResourceDAO resourceDAO,
+            final RuleProvider ruleProvider,
+            final SecurityProperties securityProperties,
+            @Qualifier(PasswordResetRequestThrottler.CACHE)
+            final Cache<String, ThrottlerAttempts> passwordResetRequestCache) {
+
+        return new UserSelfLogic(
+                realmSearchDAO,
+                anyTypeDAO,
+                templateUtils,
+                userDAO,
                 binder,
                 provisioningManager,
-                syncopeLogic,
+                encryptorManager,
+                confParamOps,
+                delegationDAO,
+                accessTokenDAO,
+                resourceDAO,
                 ruleProvider,
-                encryptorManager);
+                securityProperties,
+                passwordResetRequestCache);
+    }
+
+    @ConditionalOnMissingBean
+    @Bean
+    public SecretGenerator totpSecretGenerator() {
+        return new DefaultSecretGenerator(64);
+    }
+
+    @ConditionalOnMissingBean
+    @Bean
+    public QrGenerator totpQrGenerator() {
+        return new ZxingPngQrGenerator();
+    }
+
+    @ConditionalOnMissingBean
+    @Bean
+    public RecoveryCodeGenerator totpRecoveryCodeGenerator() {
+        return new RecoveryCodeGenerator();
+    }
+
+    @ConditionalOnMissingBean
+    @Bean
+    public MfaLogic mfaLogic(
+            final UserDataBinder userDataBinder,
+            final UserDAO userDAO,
+            final EncryptorManager encryptorManager,
+            final DomainOps domainOps,
+            final SecretGenerator totpSecretGenerator,
+            final QrGenerator totpQrGenerator,
+            final HashingAlgorithm totpHashingAlgorithm,
+            final RecoveryCodeGenerator totpRecoveryCodeGenerator,
+            final CodeVerifier totpCodeVerifier,
+            final SecurityProperties securityProperties) {
+
+        return new MfaLogic(
+                userDataBinder,
+                userDAO,
+                encryptorManager,
+                domainOps,
+                totpSecretGenerator,
+                totpQrGenerator,
+                totpHashingAlgorithm,
+                totpRecoveryCodeGenerator,
+                totpCodeVerifier,
+                securityProperties);
     }
 }

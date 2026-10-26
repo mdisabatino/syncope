@@ -83,6 +83,7 @@ import org.apache.syncope.core.provisioning.api.jexl.JexlContextBuilder;
 import org.apache.syncope.core.provisioning.api.jexl.JexlTools;
 import org.apache.syncope.core.provisioning.java.utils.ConnObjectUtils;
 import org.apache.syncope.core.provisioning.java.utils.MappingUtils;
+import org.apache.syncope.core.spring.security.AuthContextUtils;
 import org.identityconnectors.framework.common.FrameworkUtil;
 import org.identityconnectors.framework.common.objects.Attribute;
 import org.identityconnectors.framework.common.objects.AttributeBuilder;
@@ -759,11 +760,11 @@ public class DefaultMappingManager implements MappingManager {
                                 : null;
 
                         String managerValue = null;
-                        if (ref.getUManager() != null && uMappingTO != null) {
-                            managerValue = getManagerValue(resource, provision, ref.getUManager());
+                        if (ref.getuManager() != null && uMappingTO != null) {
+                            managerValue = getManagerValue(resource, provision, ref.getuManager());
                         }
-                        if (ref.getGManager() != null && gMappingTO != null) {
-                            managerValue = getManagerValue(resource, provision, ref.getGManager());
+                        if (ref.getgManager() != null && gMappingTO != null) {
+                            managerValue = getManagerValue(resource, provision, ref.getgManager());
                         }
 
                         if (StringUtils.isNotBlank(managerValue)) {
@@ -851,7 +852,9 @@ public class DefaultMappingManager implements MappingManager {
 
         IntValues transformed = new IntValues(schemaType, values);
         if (transform) {
-            for (ItemTransformer transformer : MappingUtils.getItemTransformers(item, getTransformers(item))) {
+            for (ItemTransformer transformer
+                    : MappingUtils.getItemTransformers(AuthContextUtils.getDomain(), item, getTransformers(item))) {
+
                 transformed = transformer.beforePropagation(
                         item, any, transformed.attrSchemaType(), transformed.values());
             }
@@ -930,7 +933,9 @@ public class DefaultMappingManager implements MappingManager {
 
         IntValues transformed = new IntValues(schemaType, values);
         if (transform) {
-            for (ItemTransformer transformer : MappingUtils.getItemTransformers(item, getTransformers(item))) {
+            for (ItemTransformer transformer
+                    : MappingUtils.getItemTransformers(AuthContextUtils.getDomain(), item, getTransformers(item))) {
+
                 transformed = transformer.beforePropagation(
                         item, realm, transformed.attrSchemaType(), transformed.values());
             }
@@ -1038,7 +1043,8 @@ public class DefaultMappingManager implements MappingManager {
         List<Object> values = null;
         if (attr != null) {
             values = attr.getValue();
-            for (ItemTransformer transformer : MappingUtils.getItemTransformers(item, getTransformers(item))) {
+            for (ItemTransformer transformer
+                    : MappingUtils.getItemTransformers(AuthContextUtils.getDomain(), item, getTransformers(item))) {
                 values = transformer.beforePull(item, anyTO, values);
             }
         }
@@ -1084,11 +1090,11 @@ public class DefaultMappingManager implements MappingManager {
                 }
 
                 case "uManager" -> {
-                    anyTO.setUManager(values.getFirst().toString());
+                    anyTO.setuManager(values.getFirst().toString());
                 }
 
                 case "gManager" -> {
-                    anyTO.setGManager(values.getFirst().toString());
+                    anyTO.setgManager(values.getFirst().toString());
                 }
 
                 default -> {
@@ -1163,7 +1169,9 @@ public class DefaultMappingManager implements MappingManager {
         List<Object> values = null;
         if (attr != null) {
             values = attr.getValue();
-            for (ItemTransformer transformer : MappingUtils.getItemTransformers(item, getTransformers(item))) {
+            for (ItemTransformer transformer
+                    : MappingUtils.getItemTransformers(AuthContextUtils.getDomain(), item, getTransformers(item))) {
+
                 values = transformer.beforePull(item, realmTO, values);
             }
         }

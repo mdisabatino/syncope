@@ -28,6 +28,7 @@ import org.apache.commons.lang3.BooleanUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.tuple.Pair;
 import org.apache.syncope.common.keymaster.client.api.ConfParamOps;
+import org.apache.syncope.common.keymaster.client.api.StandardConfParams;
 import org.apache.syncope.common.lib.AnyOperations;
 import org.apache.syncope.common.lib.Attr;
 import org.apache.syncope.common.lib.EntityTOUtils;
@@ -45,6 +46,7 @@ import org.apache.syncope.common.lib.to.UserTO;
 import org.apache.syncope.common.lib.types.AnyTypeKind;
 import org.apache.syncope.common.lib.types.CipherAlgorithm;
 import org.apache.syncope.common.lib.types.ClientExceptionType;
+import org.apache.syncope.common.lib.types.Mfa;
 import org.apache.syncope.common.lib.types.PatchOperation;
 import org.apache.syncope.common.lib.types.ResourceOperation;
 import org.apache.syncope.core.persistence.api.attrvalue.PlainAttrValidationManager;
@@ -215,7 +217,7 @@ public class UserDataBinderImpl extends AnyDataBinder implements UserDataBinder 
     protected void setCipherAlgorithm(final User user) {
         if (user.getCipherAlgorithm() == null) {
             user.setCipherAlgorithm(CipherAlgorithm.valueOf(confParamOps.get(AuthContextUtils.getDomain(),
-                    "password.cipher.algorithm", CipherAlgorithm.AES.name(), String.class)));
+                    StandardConfParams.PASSWORD_CIPHER_ALGORITHM, CipherAlgorithm.AES.name(), String.class)));
         }
     }
 
@@ -516,11 +518,22 @@ public class UserDataBinderImpl extends AnyDataBinder implements UserDataBinder 
         return new PropagationInfo(propByRes, propByLinkedAccount);
     }
 
-    protected LinkedAccountTO getLinkedAccountTO(final LinkedAccount account, final boolean returnPasswordValue) {
+    @Transactional
+    @Override
+    public void setMfa(final String username, final Mfa mfa) {
+        User user = userDAO.findByUsername(username).
+                orElseThrow(() -> new NotFoundException("User " + username));
+
+        user.setMfa(mfa);
+        userDAO.save(user);
+    }
+
+    @Transactional(readOnly = true)
+    @Override
+    public LinkedAccountTO getLinkedAccountTO(final LinkedAccount account) {
         LinkedAccountTO accountTO = new LinkedAccountTO.Builder(
                 account.getKey(), account.getResource().getKey(), account.getConnObjectKeyValue()).
                 username(account.getUsername()).
-                password(returnPasswordValue ? account.getPassword() : null).
                 suspended(BooleanUtils.isTrue(account.isSuspended())).
                 build();
 
@@ -532,16 +545,7 @@ public class UserDataBinderImpl extends AnyDataBinder implements UserDataBinder 
 
     @Transactional(readOnly = true)
     @Override
-    public LinkedAccountTO getLinkedAccountTO(final LinkedAccount account) {
-        return getLinkedAccountTO(account, true);
-    }
-
-    @Transactional(readOnly = true)
-    @Override
     public UserTO getUserTO(final User user, final boolean details) {
-        Boolean returnPasswordValue = confParamOps.get(AuthContextUtils.getDomain(),
-                "return.password.value", Boolean.FALSE, Boolean.class);
-
         UserTO userTO = new UserTO();
         userTO.setKey(user.getKey());
         userTO.setUsername(user.getUsername());
@@ -549,10 +553,6 @@ public class UserDataBinderImpl extends AnyDataBinder implements UserDataBinder 
         userTO.setSuspended(BooleanUtils.isTrue(user.isSuspended()));
         userTO.setMustChangePassword(user.isMustChangePassword());
 
-        if (returnPasswordValue) {
-            userTO.setPassword(user.getPassword());
-            userTO.setSecurityAnswer(user.getSecurityAnswer());
-        }
         Optional.ofNullable(user.getSecurityQuestion()).
                 map(SecurityQuestion::getKey).
                 ifPresent(userTO::setSecurityQuestion);
@@ -568,8 +568,6 @@ public class UserDataBinderImpl extends AnyDataBinder implements UserDataBinder 
         userTO.setChangePwdDate(user.getChangePwdDate());
         userTO.setFailedLogins(user.getFailedLogins());
         userTO.setLastLoginDate(user.getLastLoginDate());
-        userTO.setToken(user.getToken());
-        userTO.setTokenExpireTime(user.getTokenExpireTime());
 
         fillTO(user, userTO, derAttrHandler.getValues(user), userDAO.findAllResources(user));
 
@@ -592,8 +590,8 @@ public class UserDataBinderImpl extends AnyDataBinder implements UserDataBinder 
                     membership)).toList());
 
             // linked accounts
-            userTO.getLinkedAccounts().addAll(user.getLinkedAccounts().stream().
-                    map(account -> getLinkedAccountTO(account, returnPasswordValue)).toList());
+            userTO.getLinkedAccounts().addAll(
+                    user.getLinkedAccounts().stream().map(this::getLinkedAccountTO).toList());
 
             // delegations
             userTO.getDelegatingDelegations().addAll(

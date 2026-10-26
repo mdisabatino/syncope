@@ -18,10 +18,10 @@
  */
 package org.apache.syncope.client.console.rest;
 
+import java.io.ByteArrayInputStream;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
-import org.apache.commons.io.IOUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.syncope.common.lib.to.JobTO;
 import org.apache.syncope.common.lib.to.MailTemplateTO;
@@ -81,8 +81,9 @@ public class NotificationRestClient extends BaseRestClient {
 
     public String readTemplateFormat(final String key, final MailTemplateFormat format) {
         try {
-            return IOUtils.toString(InputStream.class.cast(
-                    getService(MailTemplateService.class).getFormat(key, format).getEntity()), StandardCharsets.UTF_8);
+            return new String(InputStream.class.cast(
+                    getService(MailTemplateService.class).getFormat(key, format).getEntity()).readAllBytes(),
+                    StandardCharsets.UTF_8);
         } catch (Exception e) {
             LOG.error("Error retrieving mail template {} as {}", key, format, e);
             return StringUtils.EMPTY;
@@ -91,6 +92,6 @@ public class NotificationRestClient extends BaseRestClient {
 
     public void updateTemplateFormat(final String key, final String content, final MailTemplateFormat format) {
         getService(MailTemplateService.class).setFormat(
-                key, format, IOUtils.toInputStream(content, StandardCharsets.UTF_8));
+                key, format, new ByteArrayInputStream(content.getBytes(StandardCharsets.UTF_8)));
     }
 }

@@ -24,7 +24,7 @@ under the License.
   <parent>
     <groupId>org.apache.syncope</groupId>
     <artifactId>syncope-wa</artifactId>
-    <version>4.1.1-SNAPSHOT</version>
+    <version>4.1.4-SNAPSHOT</version>
   </parent>
 
   <name>Apache Syncope WA Spring Boot Starter</name>
@@ -244,6 +244,10 @@ under the License.
     <dependency>
       <groupId>org.apereo.cas</groupId>
       <artifactId>cas-server-support-consent-webflow</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.apereo.cas</groupId>
+      <artifactId>cas-server-support-consent-api</artifactId>
     </dependency>
     <dependency>
       <groupId>org.apereo.cas</groupId>

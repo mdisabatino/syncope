@@ -19,14 +19,11 @@
 package org.apache.syncope.common.lib;
 
 import java.util.Collection;
-import java.util.Collections;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 import org.apache.commons.lang3.SerializationUtils;
-import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.tuple.Pair;
 import org.apache.syncope.common.lib.request.AbstractReplacePatchItem;
 import org.apache.syncope.common.lib.request.AnyObjectUR;
@@ -60,8 +57,6 @@ import org.slf4j.LoggerFactory;
 public final class AnyOperations {
 
     private static final Logger LOG = LoggerFactory.getLogger(AnyOperations.class);
-
-    private static final List<String> NULL_SINGLETON_LIST = Collections.singletonList(null);
 
     private AnyOperations() {
         // empty constructor for static utility classes
@@ -128,10 +123,31 @@ public final class AnyOperations {
         result.setRealm(replacePatchItem(updated.getRealm(), original.getRealm(), new StringReplacePatchItem()));
 
         // 2. manager
-        result.setUManager(
-                replacePatchItem(updated.getUManager(), original.getUManager(), new StringReplacePatchItem()));
-        result.setGManager(
-                replacePatchItem(updated.getGManager(), original.getGManager(), new StringReplacePatchItem()));
+        if (updated.getuManager() != null || original.getuManager() != null) {
+            StringReplacePatchItem uManager = new StringReplacePatchItem();
+            if (updated.getuManager() == null) {
+                if (!incremental) {
+                    uManager.setOperation(PatchOperation.DELETE);
+                    result.setuManager(uManager);
+                }
+            } else if (!updated.getuManager().equals(original.getuManager())) {
+                uManager.setValue(updated.getuManager());
+                result.setuManager(uManager);
+            }
+        }
+
+        if (updated.getgManager() != null || original.getgManager() != null) {
+            StringReplacePatchItem gManager = new StringReplacePatchItem();
+            if (updated.getgManager() == null) {
+                if (!incremental) {
+                    gManager.setOperation(PatchOperation.DELETE);
+                    result.setgManager(gManager);
+                }
+            } else if (!updated.getgManager().equals(original.getgManager())) {
+                gManager.setValue(updated.getgManager());
+                result.setgManager(gManager);
+            }
+        }
 
         // 3. auxiliary classes
         result.getAuxClasses().clear();
@@ -279,13 +295,9 @@ public final class AnyOperations {
         if (updated.getSecurityQuestion() == null) {
             result.setSecurityQuestion(null);
             result.setSecurityAnswer(null);
-        } else if (!updated.getSecurityQuestion().equals(original.getSecurityQuestion())
-                || StringUtils.isNotBlank(updated.getSecurityAnswer())) {
-
+        } else if (!updated.getSecurityQuestion().equals(original.getSecurityQuestion())) {
             result.setSecurityQuestion(new StringReplacePatchItem.Builder().
                     value(updated.getSecurityQuestion()).build());
-            result.setSecurityAnswer(
-                    new StringReplacePatchItem.Builder().value(updated.getSecurityAnswer()).build());
         }
 
         result.setMustChangePassword(replacePatchItem(
@@ -394,11 +406,11 @@ public final class AnyOperations {
         }
 
         // 1. manager
-        if (req.getUManager() != null) {
-            result.setUManager(req.getUManager().getValue());
+        if (req.getuManager() != null) {
+            result.setuManager(req.getuManager().getValue());
         }
-        if (req.getGManager() != null) {
-            result.setGManager(req.getGManager().getValue());
+        if (req.getgManager() != null) {
+            result.setgManager(req.getgManager().getValue());
         }
 
         // 2. auxiliary classes
@@ -581,6 +593,6 @@ public final class AnyOperations {
     }
 
     private static boolean isEmpty(final Attr attr) {
-        return attr.getValues().isEmpty() || NULL_SINGLETON_LIST.equals(attr.getValues());
+        return attr.getValues().isEmpty() || attr.getValues().stream().allMatch(e -> e == null);
     }
 }

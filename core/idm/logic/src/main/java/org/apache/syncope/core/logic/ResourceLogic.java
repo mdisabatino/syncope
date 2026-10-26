@@ -33,6 +33,7 @@ import org.apache.syncope.common.lib.to.Item;
 import org.apache.syncope.common.lib.to.Provision;
 import org.apache.syncope.common.lib.to.ResourceTO;
 import org.apache.syncope.common.lib.types.ClientExceptionType;
+import org.apache.syncope.common.lib.types.ConnConfProperty;
 import org.apache.syncope.common.lib.types.IdMEntitlement;
 import org.apache.syncope.core.persistence.api.dao.AnyTypeDAO;
 import org.apache.syncope.core.persistence.api.dao.ConnInstanceDAO;
@@ -48,7 +49,6 @@ import org.apache.syncope.core.persistence.api.utils.RealmUtils;
 import org.apache.syncope.core.provisioning.api.Connector;
 import org.apache.syncope.core.provisioning.api.ConnectorManager;
 import org.apache.syncope.core.provisioning.api.MappingManager;
-import org.apache.syncope.core.provisioning.api.data.ConnInstanceDataBinder;
 import org.apache.syncope.core.provisioning.api.data.ResourceDataBinder;
 import org.apache.syncope.core.provisioning.java.pushpull.OutboundMatcher;
 import org.apache.syncope.core.provisioning.java.utils.ConnObjectUtils;
@@ -75,8 +75,6 @@ public class ResourceLogic extends AbstractTransactionalLogic<ResourceTO> {
 
     protected final ResourceDataBinder binder;
 
-    protected final ConnInstanceDataBinder connInstanceDataBinder;
-
     protected final OutboundMatcher outboundMatcher;
 
     protected final MappingManager mappingManager;
@@ -90,7 +88,6 @@ public class ResourceLogic extends AbstractTransactionalLogic<ResourceTO> {
             final AnyTypeDAO anyTypeDAO,
             final ConnInstanceDAO connInstanceDAO,
             final ResourceDataBinder binder,
-            final ConnInstanceDataBinder connInstanceDataBinder,
             final OutboundMatcher outboundMatcher,
             final MappingManager mappingManager,
             final ConnectorManager connectorManager,
@@ -100,18 +97,10 @@ public class ResourceLogic extends AbstractTransactionalLogic<ResourceTO> {
         this.anyTypeDAO = anyTypeDAO;
         this.connInstanceDAO = connInstanceDAO;
         this.binder = binder;
-        this.connInstanceDataBinder = connInstanceDataBinder;
         this.outboundMatcher = outboundMatcher;
         this.mappingManager = mappingManager;
         this.connectorManager = connectorManager;
         this.anyUtilsFactory = anyUtilsFactory;
-    }
-
-    protected void securityChecks(final Set<String> effectiveRealms, final String realm, final String key) {
-        boolean authorized = effectiveRealms.stream().anyMatch(realm::startsWith);
-        if (!authorized) {
-            throw new DelegatedAdministrationException(realm, ExternalResource.class.getSimpleName(), key);
-        }
     }
 
     protected ExternalResource doSave(final ExternalResource resource) {
@@ -122,6 +111,12 @@ public class ResourceLogic extends AbstractTransactionalLogic<ResourceTO> {
             LOG.error("While registering connector for resource", e);
         }
         return merged;
+    }
+
+    protected void securityChecks(final Set<String> realms, final String realm, final String key) {
+        if (!RealmUtils.SubtreePredicate.of(realms).test(realm)) {
+            throw new DelegatedAdministrationException(realm, ExternalResource.class.getSimpleName(), key);
+        }
     }
 
     @PreAuthorize("hasRole('" + IdMEntitlement.RESOURCE_CREATE + "')")
@@ -374,7 +369,7 @@ public class ResourceLogic extends AbstractTransactionalLogic<ResourceTO> {
         ObjectClass objectClass;
         OperationOptions options;
         if (SyncopeConstants.REALM_ANYTYPE.equals(anyTypeKey)) {
-            resource = resourceDAO.findById(key).
+            resource = Optional.ofNullable(resourceDAO.authFind(key)).
                     orElseThrow(() -> new NotFoundException("Resource " + key));
             if (resource.getOrgUnit() == null) {
                 throw new NotFoundException("Realm provisioning for resource '" + key + '\'');
@@ -421,15 +416,25 @@ public class ResourceLogic extends AbstractTransactionalLogic<ResourceTO> {
         return Pair.of(searchResult, connObjects);
     }
 
-    @PreAuthorize("hasRole('" + IdMEntitlement.CONNECTOR_READ + "')")
+    @PreAuthorize("hasRole('" + IdMEntitlement.CONNECTOR_READ + "') "
+            + "and (hasRole('" + IdMEntitlement.CONNECTOR_CREATE + "') "
+            + "or hasRole('" + IdMEntitlement.CONNECTOR_UPDATE + "'))")
     @Transactional(readOnly = true)
     public void check(final ResourceTO resourceTO) {
         ConnInstance connInstance = connInstanceDAO.findById(resourceTO.getConnector()).
                 orElseThrow(() -> new NotFoundException("Connector " + resourceTO.getConnector()));
 
+        Optional.ofNullable(resourceTO.getKey()).flatMap(resourceDAO::findById).
+                ifPresent(externalResource -> {
+                    Optional<List<ConnConfProperty>> newConfOverride =
+                            ResourceDataBinder.newConf(externalResource.getConfOverride(),
+                                    resourceTO.getConfOverride());
+                    resourceTO.setConfOverride(newConfOverride);
+                });
+
         connectorManager.createConnector(
                 connectorManager.buildConnInstanceOverride(
-                        connInstanceDataBinder.getConnInstanceTO(connInstance),
+                        connInstance,
                         resourceTO.getConfOverride(),
                         resourceTO.getCapabilitiesOverride())).
                 test();

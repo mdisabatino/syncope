@@ -23,7 +23,6 @@ import java.security.KeyStore;
 import java.security.PrivateKey;
 import java.security.Security;
 import java.security.cert.X509Certificate;
-import java.text.ParseException;
 import java.util.Map;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.syncope.common.lib.types.IdRepoEntitlement;
@@ -78,7 +77,6 @@ import org.springframework.security.web.server.SecurityWebFilterChain;
 import org.springframework.security.web.server.util.matcher.NegatedServerWebExchangeMatcher;
 import org.springframework.security.web.server.util.matcher.ServerWebExchangeMatcher;
 import org.springframework.security.web.server.util.matcher.ServerWebExchangeMatchers;
-import reactor.core.publisher.Mono;
 
 @EnableWebFluxSecurity
 @Configuration(proxyBeanMethods = false)
@@ -88,25 +86,9 @@ public class SecurityConfig {
         Security.addProvider(new BouncyCastleProvider());
     }
 
-    @Bean
-    @Order(0)
-    @ConditionalOnProperty(prefix = SRAProperties.PREFIX, name = SRAProperties.AM_TYPE, havingValue = "SAML2")
-    public SecurityWebFilterChain saml2SecurityFilterChain(final ServerHttpSecurity http) {
-        ServerWebExchangeMatcher metadataMatcher =
-                ServerWebExchangeMatchers.pathMatchers(HttpMethod.GET, SAML2MetadataEndpoint.METADATA_URL);
-        http.securityMatcher(metadataMatcher);
-
-        http.authorizeExchange(customizer -> customizer.anyExchange().permitAll());
-
-        http.csrf(customizer -> customizer.
-                requireCsrfProtectionMatcher(new NegatedServerWebExchangeMatcher(metadataMatcher)));
-
-        return http.build();
-    }
-
     @ConditionalOnMissingBean
     @Bean
-    @Order(1)
+    @Order(0)
     public SecurityWebFilterChain actuatorSecurityFilterChain(final ServerHttpSecurity http) {
         ServerWebExchangeMatcher actuatorMatcher = EndpointRequest.toAnyEndpoint();
         http.securityMatcher(actuatorMatcher);
@@ -130,6 +112,22 @@ public class SecurityConfig {
                 roles(IdRepoEntitlement.ANONYMOUS).
                 build();
         return new MapReactiveUserDetailsService(user);
+    }
+
+    @Bean
+    @Order(1)
+    @ConditionalOnProperty(prefix = SRAProperties.PREFIX, name = SRAProperties.AM_TYPE, havingValue = "SAML2")
+    public SecurityWebFilterChain saml2SecurityFilterChain(final ServerHttpSecurity http) {
+        ServerWebExchangeMatcher metadataMatcher =
+                ServerWebExchangeMatchers.pathMatchers(HttpMethod.GET, SAML2MetadataEndpoint.METADATA_URL);
+        http.securityMatcher(metadataMatcher);
+
+        http.authorizeExchange(customizer -> customizer.anyExchange().permitAll());
+
+        http.csrf(customizer -> customizer.
+                requireCsrfProtectionMatcher(new NegatedServerWebExchangeMatcher(metadataMatcher)));
+
+        return http.build();
     }
 
     @Bean
@@ -228,18 +226,13 @@ public class SecurityConfig {
             final Converter<Map<String, Object>, Map<String, Object>> jwtClaimSetConverter) {
 
         String jwkSetUri = oauth2ClientRegistration.getProviderDetails().getJwkSetUri();
-        NimbusReactiveJwtDecoder jwtDecoder;
         if (StringUtils.isBlank(jwkSetUri)) {
-            jwtDecoder = new NimbusReactiveJwtDecoder(jwt -> {
-                try {
-                    return Mono.just(jwt.getJWTClaimsSet());
-                } catch (ParseException e) {
-                    return Mono.error(e);
-                }
-            });
-        } else {
-            jwtDecoder = NimbusReactiveJwtDecoder.withJwkSetUri(jwkSetUri).build();
+            throw new IllegalStateException(
+                    "sra.oauth2.jwkSetUri must be configured for OAuth2 JWT verification. "
+                    + "SRA cannot securely operate without JWT signature verification.");
         }
+
+        NimbusReactiveJwtDecoder jwtDecoder = NimbusReactiveJwtDecoder.withJwkSetUri(jwkSetUri).build();
         jwtDecoder.setJwtValidator(oauth2JWTValidator);
         jwtDecoder.setClaimSetConverter(jwtClaimSetConverter);
         return jwtDecoder;

@@ -17,28 +17,29 @@
  * under the License.
  */
 
+@import 'theme';
 @import 'utils';
-
-$menu_outline_color: #949494;
 
 .btn-accessibility {
   position: absolute;
   right: 0;
   font-size: 12px;
   padding: 15px 15px 0 0;
+
   i {
     font-size: 30px;
   }
+
   &:hover {
     cursor: pointer;
   }
 }
 
 .control-sidebar-menu a:focus {
-  outline: 1px $menu_outline_color solid;
+  outline: 1px var(--app-accessibility-outline) solid;
 }
 
-#change_contrast {
+#change_theme .btn-accessibility {
   top: 0;
 }
 
@@ -47,7 +48,7 @@ $menu_outline_color: #949494;
 }
 
 @include phone {
-  #change_contrast {
+  #change_theme .btn-accessibility {
     bottom: 52px;
     top: auto;
   }
@@ -56,4 +57,20 @@ $menu_outline_color: #949494;
     bottom: 12px;
     top: auto;
   }
+}
+
+.login-logo {
+  position: relative;
+}
+
+.login-logo-dark {
+  display: none;
+}
+
+html[data-bs-theme="dark"] .login-logo-light {
+  display: none;
+}
+
+html[data-bs-theme="dark"] .login-logo-dark {
+  display: inline;
 }

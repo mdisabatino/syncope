@@ -30,6 +30,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.regex.Pattern;
+import javax.cache.Cache;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.cxf.Bus;
 import org.apache.cxf.endpoint.Server;
@@ -73,13 +74,15 @@ import org.apache.syncope.core.provisioning.api.UserProvisioningManager;
 import org.apache.syncope.core.rest.cxf.JavaDocUtils;
 import org.apache.syncope.core.rest.cxf.RestServiceExceptionMapper;
 import org.apache.syncope.core.spring.security.AuthDataAccessor;
-import org.apache.syncope.core.spring.security.DefaultCredentialChecker;
 import org.apache.syncope.core.spring.security.SecurityProperties;
 import org.apache.syncope.core.spring.security.UsernamePasswordAuthenticationProvider;
 import org.apache.syncope.core.spring.security.WebSecurityContext;
+import org.apache.syncope.core.spring.security.throttle.AuthenticationThrottler;
+import org.apache.syncope.core.spring.security.throttle.ThrottlerAttempts;
 import org.apache.syncope.core.starter.SelfKeymasterContext.SelfKeymasterCondition;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.autoconfigure.AutoConfigureBefore;
 import org.springframework.boot.autoconfigure.condition.ConditionOutcome;
 import org.springframework.boot.autoconfigure.condition.SpringBootCondition;
@@ -180,7 +183,7 @@ public class SelfKeymasterContext {
 
                     ExternalDocumentation extDoc = new ExternalDocumentation();
                     extDoc.setDescription("Apache Syncope Reference Guide");
-                    extDoc.setUrl("https://syncope.apache.org/docs/4.0/reference-guide.html#domains");
+                    extDoc.setUrl("https://syncope.apache.org/docs/4.1/reference-guide.html#domains");
 
                     Schema<String> schema = new Schema<>();
                     schema.setDescription("Domains are built to facilitate multitenancy.");
@@ -202,7 +205,7 @@ public class SelfKeymasterContext {
         openapiFeature.setUseContextBasedConfig(true);
         openapiFeature.setTitle("Apache Syncope Self Keymaster");
         openapiFeature.setVersion(version);
-        openapiFeature.setDescription("Apache Syncope Self Keymaster" + version);
+        openapiFeature.setDescription("Apache Syncope Self Keymaster " + version);
         openapiFeature.setContactName("The Apache Syncope community");
         openapiFeature.setContactEmail("dev@syncope.apache.org");
         openapiFeature.setContactUrl("https://syncope.apache.org");
@@ -221,19 +224,20 @@ public class SelfKeymasterContext {
             final DomainOps domainOps,
             final AuthDataAccessor dataAccessor,
             final UserProvisioningManager provisioningManager,
-            final DefaultCredentialChecker credentialChecker,
             final SecurityProperties securityProperties,
-            final KeymasterProperties keymasterProperties,
-            final EncryptorManager encryptorManager) {
+            final EncryptorManager encryptorManager,
+            @Qualifier(AuthenticationThrottler.CACHE)
+            final Cache<String, ThrottlerAttempts> authenticationAttemptCache,
+            final KeymasterProperties keymasterProperties) {
 
         return new SelfKeymasterUsernamePasswordAuthenticationProvider(
                 domainOps,
                 dataAccessor,
                 provisioningManager,
-                credentialChecker,
                 securityProperties,
-                keymasterProperties,
-                encryptorManager);
+                encryptorManager,
+                authenticationAttemptCache,
+                keymasterProperties);
     }
 
     @Bean

@@ -350,17 +350,17 @@ public class JobWidget extends BaseWidget {
                     String roles;
                     switch (jobTO.getType()) {
                         case TASK:
-                            roles = String.format("%s,%s",
+                            roles = "%s,%s".formatted(
                                     IdRepoEntitlement.TASK_EXECUTE, IdRepoEntitlement.TASK_UPDATE);
                             break;
 
                         case REPORT:
-                            roles = String.format("%s,%s",
+                            roles = "%s,%s".formatted(
                                     IdRepoEntitlement.REPORT_EXECUTE, IdRepoEntitlement.REPORT_UPDATE);
                             break;
 
                         case NOTIFICATION:
-                            roles = String.format("%s,%s",
+                            roles = "%s,%s".formatted(
                                     IdRepoEntitlement.NOTIFICATION_EXECUTE, IdRepoEntitlement.NOTIFICATION_UPDATE);
                             break;
 
@@ -519,7 +519,6 @@ public class JobWidget extends BaseWidget {
         }
 
         @Override
-        @SuppressWarnings("unchecked")
         public void onEvent(final IEvent<?> event) {
             if (event.getPayload() instanceof AjaxWizard.NewItemCancelEvent
                     || event.getPayload() instanceof AjaxWizard.NewItemFinishEvent) {

@@ -18,7 +18,14 @@
  */
 package org.apache.syncope.core.spring.security;
 
+import dev.samstevens.totp.code.CodeVerifier;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
+import javax.cache.Cache;
+import javax.cache.CacheManager;
+import javax.cache.configuration.MutableConfiguration;
+import javax.cache.expiry.Duration;
+import javax.cache.expiry.TouchedExpiryPolicy;
 import org.apache.syncope.common.keymaster.client.api.ConfParamOps;
 import org.apache.syncope.common.keymaster.client.api.DomainOps;
 import org.apache.syncope.common.lib.types.IdRepoEntitlement;
@@ -35,6 +42,10 @@ import org.apache.syncope.core.provisioning.api.AuditManager;
 import org.apache.syncope.core.provisioning.api.ConnectorManager;
 import org.apache.syncope.core.provisioning.api.MappingManager;
 import org.apache.syncope.core.provisioning.api.UserProvisioningManager;
+import org.apache.syncope.core.spring.security.throttle.AuthenticationThrottler;
+import org.apache.syncope.core.spring.security.throttle.PasswordResetRequestThrottler;
+import org.apache.syncope.core.spring.security.throttle.ThrottlerAttempts;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -76,7 +87,8 @@ public class WebSecurityContext {
             final UsernamePasswordAuthenticationProvider usernamePasswordAuthenticationProvider,
             final AccessDeniedHandler accessDeniedHandler,
             final AuthDataAccessor dataAccessor,
-            final DefaultCredentialChecker defaultCredentialChecker) throws Exception {
+            final DefaultCredentialChecker defaultCredentialChecker,
+            final SecurityProperties securityProperties) throws Exception {
 
         AuthenticationManager authenticationManager = http.getSharedObject(AuthenticationManagerBuilder.class).
                 parentAuthenticationManager(null).
@@ -88,7 +100,7 @@ public class WebSecurityContext {
                 new SyncopeAuthenticationDetailsSource();
 
         SyncopeBasicAuthenticationEntryPoint basicAuthenticationEntryPoint =
-                new SyncopeBasicAuthenticationEntryPoint();
+                new SyncopeBasicAuthenticationEntryPoint(securityProperties);
         basicAuthenticationEntryPoint.setRealmName("Apache Syncope authentication");
         http.httpBasic(customizer -> customizer.
                 authenticationEntryPoint(basicAuthenticationEntryPoint).
@@ -102,8 +114,8 @@ public class WebSecurityContext {
                 defaultCredentialChecker);
         http.addFilterBefore(jwtAuthenticationFilter, BasicAuthenticationFilter.class);
 
-        MustChangePasswordFilter mustChangePasswordFilter = new MustChangePasswordFilter();
-        http.addFilterBefore(mustChangePasswordFilter, AuthorizationFilter.class);
+        SinglePurposeEntitlementFilter speFilter = new SinglePurposeEntitlementFilter();
+        http.addFilterBefore(speFilter, AuthorizationFilter.class);
 
         http.authorizeHttpRequests(customizer -> customizer.
                 requestMatchers(PathPatternRequestMatcher.withDefaults().matcher("/actuator/**")).
@@ -121,20 +133,53 @@ public class WebSecurityContext {
     @ConditionalOnMissingBean
     @Bean
     public UsernamePasswordAuthenticationProvider usernamePasswordAuthenticationProvider(
-            final SecurityProperties securityProperties,
-            final EncryptorManager encryptorManager,
             final DomainOps domainOps,
             final AuthDataAccessor dataAccessor,
             final UserProvisioningManager provisioningManager,
-            final DefaultCredentialChecker credentialChecker) {
+            final SecurityProperties securityProperties,
+            final EncryptorManager encryptorManager,
+            @Qualifier(AuthenticationThrottler.CACHE)
+            final Cache<String, ThrottlerAttempts> authenticationThrottlerCache) {
 
         return new UsernamePasswordAuthenticationProvider(
                 domainOps,
                 dataAccessor,
                 provisioningManager,
-                credentialChecker,
                 securityProperties,
-                encryptorManager);
+                encryptorManager,
+                authenticationThrottlerCache);
+    }
+
+    @ConditionalOnMissingBean(name = AuthenticationThrottler.CACHE)
+    @Bean(name = AuthenticationThrottler.CACHE)
+    public Cache<String, ThrottlerAttempts> authenticationThrottlerCache(
+            final CacheManager cacheManager,
+            final SecurityProperties securityProperties) {
+
+        return cacheManager.createCache(AuthenticationThrottler.CACHE,
+                new MutableConfiguration<String, ThrottlerAttempts>().
+                        setTypes(String.class, ThrottlerAttempts.class).
+                        setExpiryPolicyFactory(TouchedExpiryPolicy.factoryOf(new Duration(
+                                TimeUnit.SECONDS,
+                                Math.max(1, Math.max(
+                                        securityProperties.getAuthenticationThrottle().getWindowSeconds(),
+                                        securityProperties.getAuthenticationThrottle().getLockSeconds()))))));
+    }
+
+    @ConditionalOnMissingBean(name = PasswordResetRequestThrottler.CACHE)
+    @Bean(name = PasswordResetRequestThrottler.CACHE)
+    public Cache<String, ThrottlerAttempts> passwordResetRequestThrottlerCache(
+            final CacheManager cacheManager,
+            final SecurityProperties securityProperties) {
+
+        return cacheManager.createCache(PasswordResetRequestThrottler.CACHE,
+                new MutableConfiguration<String, ThrottlerAttempts>().
+                        setTypes(String.class, ThrottlerAttempts.class).
+                        setExpiryPolicyFactory(TouchedExpiryPolicy.factoryOf(new Duration(
+                                TimeUnit.SECONDS,
+                                Math.max(1, Math.max(
+                                        securityProperties.getPasswordResetThrottle().getWindowSeconds(),
+                                        securityProperties.getPasswordResetThrottle().getLockSeconds()))))));
     }
 
     @Bean
@@ -147,6 +192,7 @@ public class WebSecurityContext {
     public AuthDataAccessor authDataAccessor(
             final SecurityProperties securityProperties,
             final EncryptorManager encryptorManager,
+            final CodeVerifier totpCodeVerifier,
             final RealmSearchDAO realmSearchDAO,
             final UserDAO userDAO,
             final GroupDAO groupDAO,
@@ -159,11 +205,13 @@ public class WebSecurityContext {
             final ConnectorManager connectorManager,
             final AuditManager auditManager,
             final MappingManager mappingManager,
+            final DefaultCredentialChecker credentialChecker,
             final List<JWTSSOProvider> jwtSSOProviders) {
 
         return new AuthDataAccessor(
                 securityProperties,
                 encryptorManager,
+                totpCodeVerifier,
                 realmSearchDAO,
                 userDAO,
                 groupDAO,
@@ -176,6 +224,7 @@ public class WebSecurityContext {
                 connectorManager,
                 auditManager,
                 mappingManager,
+                credentialChecker,
                 jwtSSOProviders);
     }
 }

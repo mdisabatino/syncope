@@ -18,6 +18,7 @@
  */
 package org.apache.syncope.core.persistence.neo4j.dao;
 
+import java.lang.reflect.Field;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -76,6 +77,7 @@ import org.springframework.data.neo4j.core.Neo4jClient;
 import org.springframework.data.neo4j.core.Neo4jTemplate;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.CollectionUtils;
+import org.springframework.util.ReflectionUtils;
 
 public class Neo4jTaskDAO extends AbstractDAO implements TaskDAO {
 
@@ -230,8 +232,7 @@ public class Neo4jTaskDAO extends AbstractDAO implements TaskDAO {
     }
 
     @Override
-    @SuppressWarnings("unchecked")
-    public <T extends Task<T>> List<T> findToExec(final TaskType type) {
+    public long countToExec(final TaskType type) {
         TaskUtils taskUtils = taskUtilsFactory.getInstance(type);
         StringBuilder query = new StringBuilder("MATCH (n:" + taskUtils.getTaskStorage() + ") WHERE ");
 
@@ -240,10 +241,79 @@ public class Neo4jTaskDAO extends AbstractDAO implements TaskDAO {
         } else {
             query.append("(n)-[:").append(execRelationship(type)).append("]-() ");
         }
-        query.append("RETURN n.id ORDER BY n.id DESC");
+
+        query.append(" RETURN COUNT(DISTINCT n)");
+
+        return neo4jTemplate.count(query.toString());
+    }
+
+    protected String toOrderByStatement(
+            final Class<? extends Task<?>> beanClass,
+            final Stream<Sort.Order> orderByClauses) {
+
+        StringBuilder subStatement = new StringBuilder();
+        orderByClauses.forEach(clause -> {
+            String field = null;
+            switch (clause.getProperty().trim()) {
+                case "latestExecStatus":
+                    field = "status";
+                    break;
+
+                case "start":
+                    field = "startDate";
+                    break;
+
+                case "end":
+                    field = "endDate";
+                    break;
+
+                default:
+                    Field beanField = ReflectionUtils.findField(beanClass, clause.getProperty().trim());
+                    if (beanField != null) {
+                        field = beanField.getName();
+                    }
+            }
+
+            if (field == null) {
+                LOG.debug("Unsupported ORDER BY clause: {}", clause.getProperty().trim());
+            } else {
+                subStatement.append("p.").append(field).append(' ').append(clause.getDirection().name()).append(',');
+            }
+        });
+
+        StringBuilder statement = new StringBuilder(" ORDER BY ");
+        if (subStatement.length() == 0) {
+            statement.append("p.id DESC");
+        } else {
+            subStatement.deleteCharAt(subStatement.length() - 1);
+            statement.append(subStatement);
+        }
+
+        return statement.toString();
+    }
+
+    @SuppressWarnings("unchecked")
+    @Override
+    public <T extends Task<T>> List<T> findToExec(final TaskType type, final Pageable pageable) {
+        TaskUtils taskUtils = taskUtilsFactory.getInstance(type);
+        StringBuilder query = new StringBuilder("MATCH (p:" + taskUtils.getTaskStorage() + ") WHERE ");
+
+        if (type == TaskType.NOTIFICATION) {
+            query.append("p.executed = false ");
+        } else {
+            query.append("(p)-[:").append(execRelationship(type)).append("]-() ");
+        }
+
+        query.append("RETURN p.id ").append(toOrderByStatement(
+                taskUtilsFactory.getInstance(type).getTaskEntity(), pageable.getSort().stream()));
+
+        if (pageable.isPaged()) {
+            query.append(" SKIP ").append(pageable.getPageSize() * pageable.getPageNumber()).
+                    append(" LIMIT ").append(pageable.getPageSize());
+        }
 
         return toList(neo4jClient.query(query.toString()).fetch().all(),
-                "n.id",
+                "p.id",
                 (Class<AbstractTask<?>>) taskUtils.getTaskEntity(),
                 null);
     }
@@ -321,7 +391,7 @@ public class Neo4jTaskDAO extends AbstractDAO implements TaskDAO {
                     map(realmSearchDAO::findByFullPath).
                     filter(Optional::isPresent).
                     flatMap(r -> realmSearchDAO.findDescendants(r.get().getFullPath(), null).
-                    stream()).
+                            stream()).
                     map(Realm::getKey).
                     distinct();
 
@@ -382,46 +452,6 @@ public class Neo4jTaskDAO extends AbstractDAO implements TaskDAO {
         return neo4jTemplate.count(query.toString(), parameters);
     }
 
-    protected String toOrderByStatement(
-            final Class<? extends Task<?>> beanClass,
-            final Stream<Sort.Order> orderByClauses) {
-
-        StringBuilder statement = new StringBuilder();
-
-        statement.append("ORDER BY ");
-
-        StringBuilder subStatement = new StringBuilder();
-        orderByClauses.forEach(clause -> {
-            String field = clause.getProperty().trim();
-            switch (field) {
-                case "latestExecStatus":
-                    field = "status";
-                    break;
-
-                case "start":
-                    field = "startDate";
-                    break;
-
-                case "end":
-                    field = "endDate";
-                    break;
-
-                default:
-            }
-
-            subStatement.append("p.").append(field).append(' ').append(clause.getDirection().name()).append(',');
-        });
-
-        if (subStatement.length() == 0) {
-            statement.append("n.id DESC");
-        } else {
-            subStatement.deleteCharAt(subStatement.length() - 1);
-            statement.append(subStatement);
-        }
-
-        return statement.toString();
-    }
-
     @SuppressWarnings("unchecked")
     @Override
     public <T extends Task<T>> List<T> findAll(
@@ -447,7 +477,8 @@ public class Neo4jTaskDAO extends AbstractDAO implements TaskDAO {
 
         query.append(" WITH n ");
 
-        query.append(toOrderByStatement(taskUtils.getTaskEntity(), pageable.getSort().get()));
+        query.append(toOrderByStatement(
+                taskUtilsFactory.getInstance(type).getTaskEntity(), pageable.getSort().stream()));
 
         if (pageable.isPaged()) {
             query.append(" SKIP ").append(pageable.getPageSize() * pageable.getPageNumber()).
@@ -496,10 +527,10 @@ public class Neo4jTaskDAO extends AbstractDAO implements TaskDAO {
 
                     t.getActions().stream().filter(act -> !pullTask.getActions().contains(act)).
                             forEach(impl -> deleteRelationship(Neo4jPullTask.NODE,
-                            Neo4jImplementation.NODE,
-                            pullTask.getKey(),
-                            impl.getKey(),
-                            Neo4jPullTask.PULL_TASK_INBOUND_ACTIONS_REL));
+                                    Neo4jImplementation.NODE,
+                                    pullTask.getKey(),
+                                    impl.getKey(),
+                                    Neo4jPullTask.PULL_TASK_INBOUND_ACTIONS_REL));
                 });
 
             case Neo4jPushTask pushTask -> {
@@ -507,12 +538,12 @@ public class Neo4jTaskDAO extends AbstractDAO implements TaskDAO {
 
                 neo4jTemplate.findById(pushTask.getKey(), Neo4jPushTask.class).
                         ifPresent(t -> t.getActions().stream().filter(act -> !pushTask.getActions().contains(act)).
-                        forEach(impl -> deleteRelationship(
-                        Neo4jPushTask.NODE,
-                        Neo4jImplementation.NODE,
-                        pushTask.getKey(),
-                        impl.getKey(),
-                        Neo4jPushTask.PUSH_TASK_PUSH_ACTIONS_REL)));
+                                forEach(impl -> deleteRelationship(
+                                        Neo4jPushTask.NODE,
+                                        Neo4jImplementation.NODE,
+                                        pushTask.getKey(),
+                                        impl.getKey(),
+                                        Neo4jPushTask.PUSH_TASK_PUSH_ACTIONS_REL)));
             }
 
             case Neo4jMacroTask macroTask ->

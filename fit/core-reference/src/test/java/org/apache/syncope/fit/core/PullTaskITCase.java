@@ -37,9 +37,9 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.Comparator;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -49,7 +49,6 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
-import org.apache.commons.io.IOUtils;
 import org.apache.commons.lang3.SerializationUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.Strings;
@@ -120,10 +119,14 @@ import org.identityconnectors.framework.common.objects.AttributeUtil;
 import org.identityconnectors.framework.common.objects.Name;
 import org.identityconnectors.framework.common.objects.Uid;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.MethodOrderer.OrderAnnotation;
+import org.junit.jupiter.api.Order;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestMethodOrder;
 import org.springframework.core.task.SimpleAsyncTaskExecutor;
 import org.springframework.jdbc.core.JdbcTemplate;
 
+@TestMethodOrder(OrderAnnotation.class)
 public class PullTaskITCase extends AbstractTaskITCase {
 
     private static final String LDAP_PULL_TASK = "1e419ca4-ea81-4493-a14f-28b90113686d";
@@ -196,7 +199,7 @@ public class PullTaskITCase extends AbstractTaskITCase {
     @Test
     public void getPullActionsClasses() {
         Set<String> actions = ANONYMOUS_CLIENT.platform().
-                getJavaImplInfo(IdMImplementationType.INBOUND_ACTIONS).orElseThrow().getClasses();
+                getJavaImplInfo(IdMImplementationType.INBOUND_ACTIONS).orElseThrow().classes();
         assertNotNull(actions);
         assertFalse(actions.isEmpty());
     }
@@ -240,6 +243,7 @@ public class PullTaskITCase extends AbstractTaskITCase {
         assertEquals(groupTemplate, task.getTemplates().get(AnyTypeKind.GROUP.name()));
     }
 
+    @Order(1)
     @Test
     public void fromCSV() throws Exception {
         assumeFalse(IS_EXT_SEARCH_ENABLED);
@@ -265,7 +269,7 @@ public class PullTaskITCase extends AbstractTaskITCase {
         // -----------------------------
         UserCR inUserRC = new UserCR();
         inUserRC.setRealm(SyncopeConstants.ROOT_REALM);
-        inUserRC.setPassword("password123");
+        inUserRC.setPassword(DEFAULT_PASSWORD);
         String userName = "test9";
         inUserRC.setUsername(userName);
         inUserRC.getPlainAttrs().add(attr("firstname", "nome9"));
@@ -409,6 +413,7 @@ public class PullTaskITCase extends AbstractTaskITCase {
         }
     }
 
+    @Order(2)
     @Test
     public void reconcileFromLDAP() {
         assumeFalse(IS_NEO4J_PERSISTENCE);
@@ -475,15 +480,17 @@ public class PullTaskITCase extends AbstractTaskITCase {
         assertEquals("testLDAPGroup", groupTO.getName());
         assertTrue(groupTO.getLastChangeContext().contains("Task " + task.getKey()));
         assertEquals("true", groupTO.getPlainAttr("show").orElseThrow().getValues().getFirst());
-        assertEquals(matchingUsers.getResult().getFirst().getKey(), groupTO.getUManager());
-        assertNull(groupTO.getGManager());
+        assertEquals(matchingUsers.getResult().getFirst().getKey(), groupTO.getuManager());
+        assertNull(groupTO.getgManager());
         // SYNCOPE-1343, set value title to null on LDAP
         ConnObject userConnObject = RESOURCE_SERVICE.readConnObject(
                 RESOURCE_NAME_LDAP, AnyTypeKind.USER.name(), matchingUsers.getResult().getFirst().getKey());
         assertNotNull(userConnObject);
         assertEquals("odd", userConnObject.getAttr("title").orElseThrow().getValues().getFirst());
         Attr userDn = userConnObject.getAttr(Name.NAME).orElseThrow();
-        updateLdapRemoteObject(userDn.getValues().getFirst(), Collections.singletonMap("title", null));
+        Map<String, String> attributes = new HashMap<>();
+        attributes.put("title", null);
+        updateLdapRemoteObject(userDn.getValues().getFirst(), attributes);
 
         // SYNCOPE-317
         execSchedTask(TASK_SERVICE, TaskType.PULL, LDAP_PULL_TASK, MAX_WAIT_SECONDS, false);
@@ -551,8 +558,9 @@ public class PullTaskITCase extends AbstractTaskITCase {
                 transformer.setKey("PrefixItemTransformer");
                 transformer.setEngine(ImplementationEngine.GROOVY);
                 transformer.setType(IdRepoImplementationType.ITEM_TRANSFORMER);
-                transformer.setBody(IOUtils.toString(
-                        getClass().getResourceAsStream("/PrefixItemTransformer.groovy"), StandardCharsets.UTF_8));
+                transformer.setBody(new String(
+                        getClass().getResourceAsStream("/PrefixItemTransformer.groovy").readAllBytes(),
+                        StandardCharsets.UTF_8));
                 Response response = IMPLEMENTATION_SERVICE.create(transformer);
                 transformer = IMPLEMENTATION_SERVICE.read(
                         transformer.getType(), response.getHeaderString(RESTHeaders.RESOURCE_KEY));
@@ -672,8 +680,9 @@ public class PullTaskITCase extends AbstractTaskITCase {
             reconFilterBuilder.setKey("TestReconFilterBuilder");
             reconFilterBuilder.setEngine(ImplementationEngine.GROOVY);
             reconFilterBuilder.setType(IdMImplementationType.RECON_FILTER_BUILDER);
-            reconFilterBuilder.setBody(IOUtils.toString(
-                    getClass().getResourceAsStream("/TestReconFilterBuilder.groovy"), StandardCharsets.UTF_8));
+            reconFilterBuilder.setBody(new String(
+                    getClass().getResourceAsStream("/TestReconFilterBuilder.groovy").readAllBytes(),
+                    StandardCharsets.UTF_8));
             Response response = IMPLEMENTATION_SERVICE.create(reconFilterBuilder);
             reconFilterBuilder = IMPLEMENTATION_SERVICE.read(
                     reconFilterBuilder.getType(), response.getHeaderString(RESTHeaders.RESOURCE_KEY));
@@ -724,6 +733,8 @@ public class PullTaskITCase extends AbstractTaskITCase {
         resForTest.setKey("syncTokenWithErrors");
         resForTest.setConnector(null);
         ConnInstanceTO connForTest = SerializationUtils.clone(origConnector);
+        connForTest.getConf().stream().filter(p -> "password".equals(p.getSchema().getName())).findFirst().
+                ifPresent(p -> p.getValues().add(DB_PASSWORD));
         connForTest.setKey(null);
         connForTest.setDisplayName("For syncTokenWithErrors");
 
@@ -800,6 +811,7 @@ public class PullTaskITCase extends AbstractTaskITCase {
         }
     }
 
+    @Order(3)
     @Test
     public void remediation() {
         // First of all, clear any potential conflict with existing user / group
@@ -886,6 +898,7 @@ public class PullTaskITCase extends AbstractTaskITCase {
         }
     }
 
+    @Order(4)
     @Test
     public void remediationSinglePull() throws IOException {
         // First of all, clear any potential conflict with existing user / group
@@ -951,33 +964,34 @@ public class PullTaskITCase extends AbstractTaskITCase {
         // 0. first cleanup then create 20 users on LDAP
         ldapCleanup();
 
-        SimpleAsyncTaskExecutor tp = new SimpleAsyncTaskExecutor();
-        tp.setVirtualThreads(true);
-        List<Future<?>> futures = new ArrayList<>();
+        try (SimpleAsyncTaskExecutor tp = new SimpleAsyncTaskExecutor()) {
+            tp.setVirtualThreads(true);
+            List<Future<?>> futures = new ArrayList<>();
 
-        for (int i = 0; i < 20; i++) {
-            String idx = StringUtils.leftPad(String.valueOf(i), 2, "0");
-            futures.add(tp.submit(() -> createLdapRemoteObject(
-                    "uid=pullFromLDAP_" + idx + ",ou=People,o=isp",
-                    Map.of(
-                            "objectClass", "inetOrgPerson",
-                            "uid", "pullFromLDAP_" + idx,
-                            "cn", "pullFromLDAP_" + idx,
-                            "mail", "pullFromLDAP_" + idx + "@syncope.apache.org",
-                            "description", "Active",
-                            "givenName", "pullFromLDAP_" + idx,
-                            "sn", "Surname",
-                            "registeredAddress", "5BAA61E4C9B93F3F0682250B6CF8331B7EE68FD8",
-                            "title", "odd",
-                            "userpassword", "password"))));
-        }
-        futures.forEach(future -> {
-            try {
-                future.get(MAX_WAIT_SECONDS, TimeUnit.SECONDS);
-            } catch (Exception e) {
-                LOG.error("While getting futures", e);
+            for (int i = 0; i < 20; i++) {
+                String idx = StringUtils.leftPad(String.valueOf(i), 2, "0");
+                futures.add(tp.submit(() -> createLdapRemoteObject(
+                        "uid=pullFromLDAP_" + idx + ",ou=People,o=isp",
+                        Map.of(
+                                "objectClass", "inetOrgPerson",
+                                "uid", "pullFromLDAP_" + idx,
+                                "cn", "pullFromLDAP_" + idx,
+                                "mail", "pullFromLDAP_" + idx + "@syncope.apache.org",
+                                "description", "Active",
+                                "givenName", "pullFromLDAP_" + idx,
+                                "sn", "Surname",
+                                "registeredAddress", "5BAA61E4C9B93F3F0682250B6CF8331B7EE68FD8",
+                                "title", "odd",
+                                "userpassword", "password"))));
             }
-        });
+            futures.forEach(future -> {
+                try {
+                    future.get(MAX_WAIT_SECONDS, TimeUnit.SECONDS);
+                } catch (Exception e) {
+                    LOG.error("While getting futures", e);
+                }
+            });
+        }
 
         // 1. create new concurrent pull task
         PullTaskTO pullTask = TASK_SERVICE.read(TaskType.PULL, LDAP_PULL_TASK, false);
@@ -1024,7 +1038,7 @@ public class PullTaskITCase extends AbstractTaskITCase {
         //-----------------------------
         UserCR userCR = new UserCR();
         userCR.setRealm(SyncopeConstants.ROOT_REALM);
-        userCR.setPassword("password123");
+        userCR.setPassword(DEFAULT_PASSWORD);
         userCR.setUsername("testuser2");
 
         userCR.getPlainAttrs().add(attr("firstname", "testuser2"));
@@ -1138,8 +1152,8 @@ public class PullTaskITCase extends AbstractTaskITCase {
                 corrRule.setKey("TestPullRule");
                 corrRule.setEngine(ImplementationEngine.GROOVY);
                 corrRule.setType(IdMImplementationType.INBOUND_CORRELATION_RULE);
-                corrRule.setBody(IOUtils.toString(
-                        getClass().getResourceAsStream("/TestPullRule.groovy"), StandardCharsets.UTF_8));
+                corrRule.setBody(new String(
+                        getClass().getResourceAsStream("/TestPullRule.groovy").readAllBytes(), StandardCharsets.UTF_8));
                 Response response = IMPLEMENTATION_SERVICE.create(corrRule);
                 corrRule = IMPLEMENTATION_SERVICE.read(
                         corrRule.getType(), response.getHeaderString(RESTHeaders.RESOURCE_KEY));
@@ -1585,8 +1599,9 @@ public class PullTaskITCase extends AbstractTaskITCase {
                 pullActions.setKey("AddResourcePullActions");
                 pullActions.setEngine(ImplementationEngine.GROOVY);
                 pullActions.setType(IdMImplementationType.INBOUND_ACTIONS);
-                pullActions.setBody(IOUtils.toString(
-                        getClass().getResourceAsStream("/AddResourcePullActions.groovy"), StandardCharsets.UTF_8));
+                pullActions.setBody(new String(
+                        getClass().getResourceAsStream("/AddResourcePullActions.groovy").readAllBytes(),
+                        StandardCharsets.UTF_8));
                 Response response = IMPLEMENTATION_SERVICE.create(pullActions);
                 pullActions = IMPLEMENTATION_SERVICE.read(
                         pullActions.getType(), response.getHeaderString(RESTHeaders.RESOURCE_KEY));

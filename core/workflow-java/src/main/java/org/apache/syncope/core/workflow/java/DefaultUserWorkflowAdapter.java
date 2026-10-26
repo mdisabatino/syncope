@@ -18,8 +18,10 @@
  */
 package org.apache.syncope.core.workflow.java;
 
+import java.util.Optional;
 import org.apache.commons.lang3.tuple.Pair;
 import org.apache.syncope.common.keymaster.client.api.ConfParamOps;
+import org.apache.syncope.common.keymaster.client.api.StandardConfParams;
 import org.apache.syncope.common.lib.request.PasswordPatch;
 import org.apache.syncope.common.lib.request.UserCR;
 import org.apache.syncope.common.lib.request.UserUR;
@@ -79,6 +81,27 @@ public class DefaultUserWorkflowAdapter extends AbstractUserWorkflowAdapter {
         this.notificationManager = notificationManager;
     }
 
+    protected void throwApprovalRequired(
+            final String key,
+            final boolean condition,
+            final String executor,
+            final String context) {
+
+        if (securityProperties.getAdminUser().equals(executor)) {
+            return;
+        }
+
+        boolean isSelf = securityProperties.getAnonymousUser().equals(executor)
+                || Optional.ofNullable(key).flatMap(userDAO::findUsername).map(executor::equals).orElse(false);
+        if (isSelf
+                && condition
+                && confParamOps.get(
+                        AuthContextUtils.getDomain(), "default.workflow.requires.approval", true, boolean.class)) {
+
+            throw new WorkflowException(new UnsupportedOperationException("This operation requires approval"));
+        }
+    }
+
     @Override
     protected UserWorkflowResult<Pair<String, Boolean>> doCreate(
             final UserCR userCR,
@@ -86,6 +109,8 @@ public class DefaultUserWorkflowAdapter extends AbstractUserWorkflowAdapter {
             final Boolean enabled,
             final String creator,
             final String context) {
+
+        throwApprovalRequired(null, userCR.requiresApproval(), creator, context);
 
         User user = entityFactory.newEntity(User.class);
         dataBinder.create(user, userCR);
@@ -147,6 +172,8 @@ public class DefaultUserWorkflowAdapter extends AbstractUserWorkflowAdapter {
     protected UserWorkflowResult<Pair<UserUR, Boolean>> doUpdate(
             final User user, final UserUR userUR, final String updater, final String context) {
 
+        throwApprovalRequired(userUR.getKey(), userUR.requiresApproval(), updater, context);
+
         UserWorkflowResult.PropagationInfo propInfo = dataBinder.update(user, userUR);
 
         metadata(user, updater, context);
@@ -188,8 +215,8 @@ public class DefaultUserWorkflowAdapter extends AbstractUserWorkflowAdapter {
     @Override
     protected void doRequestPasswordReset(final User user, final String updater, final String context) {
         user.generateToken(
-                confParamOps.get(AuthContextUtils.getDomain(), "token.length", 256, Integer.class),
-                confParamOps.get(AuthContextUtils.getDomain(), "token.expireTime", 60, Integer.class));
+                confParamOps.get(AuthContextUtils.getDomain(), StandardConfParams.TOKEN_LENGTH, 256, int.class),
+                confParamOps.get(AuthContextUtils.getDomain(), StandardConfParams.TOKEN_EXPIRE_TIME, 60, int.class));
 
         notificationManager.createTasks(
                 updater,

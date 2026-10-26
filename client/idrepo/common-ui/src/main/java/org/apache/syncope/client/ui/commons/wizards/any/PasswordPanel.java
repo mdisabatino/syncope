@@ -19,11 +19,11 @@
 package org.apache.syncope.client.ui.commons.wizards.any;
 
 import de.agilecoders.wicket.extensions.markup.html.bootstrap.form.password.strength.PasswordStrengthBehavior;
-import org.apache.syncope.client.ui.commons.markup.html.form.AjaxCheckBoxPanel;
 import org.apache.syncope.client.ui.commons.markup.html.form.AjaxPasswordFieldPanel;
 import org.apache.syncope.client.ui.commons.markup.html.form.AjaxTextFieldPanel;
+import org.apache.syncope.client.ui.commons.markup.html.form.AjaxTripleStateButtonPanel;
 import org.apache.syncope.client.ui.commons.markup.html.form.SyncopePasswordStrengthConfig;
-import org.apache.syncope.client.ui.commons.rest.UserComplianceRestClient;
+import org.apache.syncope.client.ui.commons.rest.AnonymousRestClient;
 import org.apache.syncope.common.rest.api.beans.ComplianceQuery;
 import org.apache.wicket.markup.html.form.Form;
 import org.apache.wicket.markup.html.form.FormComponent;
@@ -44,7 +44,8 @@ public class PasswordPanel extends Panel {
             final UserWrapper wrapper,
             final Boolean storePasswordInSyncope,
             final boolean templateMode,
-            final UserComplianceRestClient restClient) {
+            final String token,
+            final AnonymousRestClient restClient) {
 
         super(id);
         setOutputMarkupId(true);
@@ -95,6 +96,7 @@ public class PasswordPanel extends Panel {
                     ComplianceQuery quey = new ComplianceQuery.Builder().
                             realm(wrapper.getInnerObject().getRealm()).
                             password(password.getField().getInput()).
+                            token(token).
                             resources(wrapper.getInnerObject().getResources()).
                             build();
                     try {
@@ -106,8 +108,10 @@ public class PasswordPanel extends Panel {
             });
         }
 
-        AjaxCheckBoxPanel storePasswordInSyncopePanel = new AjaxCheckBoxPanel("storePasswordInSyncope",
+        AjaxTripleStateButtonPanel storePasswordInSyncopePanel = new AjaxTripleStateButtonPanel(
+                "storePasswordInSyncope",
                 "storePasswordInSyncope", new PropertyModel<>(wrapper, "storePasswordInSyncope"));
+        storePasswordInSyncopePanel.addRequiredLabel();
         storePasswordInSyncopePanel.getField().setLabel(new ResourceModel("storePasswordInSyncope"));
         storePasswordInSyncopePanel.setOutputMarkupId(true);
         storePasswordInSyncopePanel.setOutputMarkupPlaceholderTag(true);

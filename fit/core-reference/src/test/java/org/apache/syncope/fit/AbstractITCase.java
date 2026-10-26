@@ -21,7 +21,9 @@ package org.apache.syncope.fit;
 import static org.awaitility.Awaitility.await;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.fail;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.json.JsonMapper;
 import com.nimbusds.jose.JWSAlgorithm;
@@ -90,7 +92,6 @@ import org.apache.syncope.common.lib.request.UserUR;
 import org.apache.syncope.common.lib.to.AnyObjectTO;
 import org.apache.syncope.common.lib.to.AuditEventTO;
 import org.apache.syncope.common.lib.to.ClientAppTO;
-import org.apache.syncope.common.lib.to.ConnInstanceTO;
 import org.apache.syncope.common.lib.to.ExecTO;
 import org.apache.syncope.common.lib.to.GroupTO;
 import org.apache.syncope.common.lib.to.ImplementationTO;
@@ -141,6 +142,7 @@ import org.apache.syncope.common.rest.api.service.DelegationService;
 import org.apache.syncope.common.rest.api.service.GroupService;
 import org.apache.syncope.common.rest.api.service.ImplementationService;
 import org.apache.syncope.common.rest.api.service.MailTemplateService;
+import org.apache.syncope.common.rest.api.service.MfaService;
 import org.apache.syncope.common.rest.api.service.NotificationService;
 import org.apache.syncope.common.rest.api.service.OIDCC4UIProviderService;
 import org.apache.syncope.common.rest.api.service.OIDCC4UIService;
@@ -174,6 +176,7 @@ import org.apache.syncope.common.rest.api.service.wa.MfaTrustStorageService;
 import org.apache.syncope.common.rest.api.service.wa.WAConfigService;
 import org.apache.syncope.common.rest.api.service.wa.WebAuthnRegistrationService;
 import org.apache.syncope.core.persistence.api.EncryptorManager;
+import org.apache.syncope.core.spring.security.DefaultCredentialChecker;
 import org.apache.syncope.core.spring.security.DefaultEncryptorManager;
 import org.apache.syncope.core.spring.security.SecurityProperties;
 import org.apache.syncope.fit.AbstractITCase.KeymasterInitializer;
@@ -224,6 +227,8 @@ public abstract class AbstractITCase {
     protected static final String ADMIN_UNAME = "admin";
 
     protected static final String ADMIN_PWD = "password";
+
+    protected static final String DEFAULT_PASSWORD = "password123";
 
     protected static final String ADDRESS = "http://localhost:9080/syncope/rest";
 
@@ -285,6 +290,8 @@ public abstract class AbstractITCase {
 
     protected static String ANONYMOUS_KEY;
 
+    protected static int AUTHENTICATION_THROTTLE_MAX_ATTEMPTS;
+
     protected static String JWS_KEY;
 
     protected static String JWT_ISSUER;
@@ -318,6 +325,8 @@ public abstract class AbstractITCase {
     protected static UserRequestService USER_REQUEST_SERVICE;
 
     protected static UserWorkflowTaskService USER_WORKFLOW_TASK_SERVICE;
+
+    protected static MfaService MFA_SERVICE;
 
     protected static GroupService GROUP_SERVICE;
 
@@ -395,6 +404,14 @@ public abstract class AbstractITCase {
 
     private static int POP3_PORT;
 
+    protected static String DB_PASSWORD;
+
+    private static int LDAP_PORT;
+
+    private static String LDAP_PRINCIPAL;
+
+    private static String LDAP_PASSWORD;
+
     protected static boolean IS_FLOWABLE_ENABLED = false;
 
     protected static boolean IS_ELASTICSEARCH_ENABLED = false;
@@ -459,6 +476,8 @@ public abstract class AbstractITCase {
             JWT_ISSUER = props.getProperty("security.jwtIssuer");
             JWS_ALGORITHM = JWSAlgorithm.parse(props.getProperty("security.jwsAlgorithm"));
             JWS_KEY = props.getProperty("security.jwsKey");
+            AUTHENTICATION_THROTTLE_MAX_ATTEMPTS = Integer.parseInt(
+                    props.getProperty("security.authenticationThrottle.maxAttempts"));
         } catch (Exception e) {
             LOG.error("Could not read core.properties", e);
         }
@@ -532,6 +551,16 @@ public abstract class AbstractITCase {
 
         POP3_PORT = Integer.parseInt(props.getProperty("testmail.pop3port"));
         assertNotNull(POP3_PORT);
+
+        DB_PASSWORD = props.getProperty("testdb.password");
+        assertNotNull(DB_PASSWORD);
+
+        LDAP_PORT = Integer.parseInt(props.getProperty("testds.port"));
+        assertNotNull(LDAP_PORT);
+        LDAP_PRINCIPAL = props.getProperty("testds.bindDn");
+        assertNotNull(LDAP_PRINCIPAL);
+        LDAP_PASSWORD = props.getProperty("testds.password");
+        assertNotNull(LDAP_PASSWORD);
     }
 
     @BeforeAll
@@ -551,6 +580,7 @@ public abstract class AbstractITCase {
         USER_SELF_SERVICE = ADMIN_CLIENT.getService(UserSelfService.class);
         USER_REQUEST_SERVICE = ADMIN_CLIENT.getService(UserRequestService.class);
         USER_WORKFLOW_TASK_SERVICE = ADMIN_CLIENT.getService(UserWorkflowTaskService.class);
+        MFA_SERVICE = ADMIN_CLIENT.getService(MfaService.class);
         GROUP_SERVICE = ADMIN_CLIENT.getService(GroupService.class);
         RESOURCE_SERVICE = ADMIN_CLIENT.getService(ResourceService.class);
         CONNECTOR_SERVICE = ADMIN_CLIENT.getService(ConnectorService.class);
@@ -785,12 +815,11 @@ public abstract class AbstractITCase {
     private static <T> T execOnLDAP(
             final String bindDn,
             final String bindPassword,
-            final ConnInstanceTO connInstance,
             final ThrowingFunction<LDAPConnection, T> function) throws LDAPException {
 
         try (LDAPConnection ldapConn = new LDAPConnection(
-                connInstance.getConf("host").orElseThrow().getValues().getFirst().toString(),
-                Integer.parseInt(connInstance.getConf("port").orElseThrow().getValues().getFirst().toString()),
+                "localhost",
+                LDAP_PORT,
                 bindDn,
                 bindPassword)) {
 
@@ -798,24 +827,8 @@ public abstract class AbstractITCase {
         }
     }
 
-    private static <T> T execOnLDAP(
-            final String bindDn,
-            final String bindPassword,
-            final ThrowingFunction<LDAPConnection, T> function) throws LDAPException {
-
-        ConnInstanceTO connInstance = CONNECTOR_SERVICE.read("74141a3b-0762-4720-a4aa-fc3e374ef3ef", null);
-
-        return execOnLDAP(bindDn, bindPassword, connInstance, function);
-    }
-
     private static <T> T execOnLDAP(final ThrowingFunction<LDAPConnection, T> function) throws LDAPException {
-        ConnInstanceTO connInstance = CONNECTOR_SERVICE.read("74141a3b-0762-4720-a4aa-fc3e374ef3ef", null);
-
-        return execOnLDAP(
-                connInstance.getConf("principal").orElseThrow().getValues().getFirst().toString(),
-                connInstance.getConf("credentials").orElseThrow().getValues().getFirst().toString(),
-                connInstance,
-                function);
+        return execOnLDAP(LDAP_PRINCIPAL, LDAP_PASSWORD, function);
     }
 
     protected static SearchResult ldapSearch(final String baseDn, final String filter) {
@@ -830,7 +843,7 @@ public abstract class AbstractITCase {
 
     protected static SearchResultEntry getLdapRemoteObject(final String objectDn) {
         try {
-            return execOnLDAP(ldapConn -> ldapConn.searchForEntry(
+            return execOnLDAP(LDAP_PRINCIPAL, LDAP_PASSWORD, ldapConn -> ldapConn.searchForEntry(
                     new SearchRequest(objectDn, SearchScope.BASE, "objectClass=*")));
         } catch (LDAPException e) {
             LOG.error("While reading {}", objectDn, e);
@@ -1131,6 +1144,38 @@ public abstract class AbstractITCase {
         });
     }
 
+    protected static String getPassword(final String key) throws JsonProcessingException {
+        String response = WebClient.create(
+                StringUtils.substringBeforeLast(ADDRESS, "/") + "/actuator/testSecurity/PASSWORD/" + key,
+                ANONYMOUS_UNAME,
+                ANONYMOUS_KEY,
+                null).
+                accept(MediaType.APPLICATION_JSON).get().readEntity(String.class);
+        @SuppressWarnings("unchecked")
+        Map<String, Object> payload = MAPPER.readValue(response, Map.class);
+        return payload.isEmpty()
+                ? null
+                : Optional.ofNullable(payload.get("password")).map(Object::toString).orElse(null);
+    }
+
+    protected static Map<String, Object> getToken(final String key) {
+        String response = WebClient.create(
+                StringUtils.substringBeforeLast(ADDRESS, "/") + "/actuator/testSecurity/TOKEN/" + key,
+                ANONYMOUS_UNAME,
+                ANONYMOUS_KEY,
+                null).
+                accept(MediaType.APPLICATION_JSON).get().readEntity(String.class);
+
+        try {
+            @SuppressWarnings("unchecked")
+            Map<String, Object> payload = MAPPER.readValue(response, Map.class);
+            return payload;
+        } catch (Exception e) {
+            LOG.error("Could not parse {}", response, e);
+            return Map.of();
+        }
+    }
+
     @Autowired
     protected ConfParamOps confParamOps;
 
@@ -1143,11 +1188,17 @@ public abstract class AbstractITCase {
     @Autowired
     protected DataSource testDataSource;
 
-    protected final EncryptorManager encryptorManager;
+    protected EncryptorManager encryptorManager;
 
     protected AbstractITCase() {
         SecurityProperties securityProperties = new SecurityProperties();
         securityProperties.setAesSecretKey(StringUtils.EMPTY);
-        encryptorManager = new DefaultEncryptorManager(securityProperties);
+        securityProperties.setProductionMode(false);
+        try {
+            encryptorManager = new DefaultEncryptorManager(
+                    new DefaultCredentialChecker("", "", "", "", false), securityProperties);
+        } catch (IOException e) {
+            fail(e.getMessage(), e);
+        }
     }
 }

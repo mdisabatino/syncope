@@ -19,8 +19,11 @@
 package org.apache.syncope.common.rest.api.beans;
 
 import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.media.ArraySchema;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.ws.rs.QueryParam;
+import java.util.HashSet;
+import java.util.Set;
 import org.apache.syncope.common.lib.types.OpEvent;
 import org.apache.syncope.common.rest.api.service.JAXRSService;
 
@@ -37,6 +40,16 @@ public class AuditQuery extends AbstractTimeframeQuery {
 
         public Builder entityKey(final String entityKey) {
             getInstance().setEntityKey(entityKey);
+            return this;
+        }
+
+        public Builder username(final String username) {
+            getInstance().getUsername().add(username);
+            return this;
+        }
+
+        public Builder who(final String who) {
+            getInstance().getWho().add(who);
             return this;
         }
 
@@ -68,6 +81,10 @@ public class AuditQuery extends AbstractTimeframeQuery {
 
     private String entityKey;
 
+    private Set<String> username = new HashSet<>();
+
+    private Set<String> who = new HashSet<>();
+
     private OpEvent.CategoryType type;
 
     private String category;
@@ -87,6 +104,31 @@ public class AuditQuery extends AbstractTimeframeQuery {
     @QueryParam(JAXRSService.PARAM_ENTITY_KEY)
     public void setEntityKey(final String entityKey) {
         this.entityKey = entityKey;
+    }
+
+    @Parameter(name = "username", description = "username(s) embedded in the audited payload to match "
+            + "(the affected entity, as opposed to the 'who' author); "
+            + "may be repeated to match any of the given values", array =
+            @ArraySchema(schema = @Schema(implementation = String.class)))
+    public Set<String> getUsername() {
+        return username;
+    }
+
+    @QueryParam("username")
+    public void setUsername(final Set<String> username) {
+        this.username = username;
+    }
+
+    @Parameter(name = "who", description = "audit event author(s) (username) to match; "
+            + "may be repeated to match any of the given values", array =
+            @ArraySchema(schema = @Schema(implementation = String.class)))
+    public Set<String> getWho() {
+        return who;
+    }
+
+    @QueryParam("who")
+    public void setWho(final Set<String> who) {
+        this.who = who;
     }
 
     @Parameter(name = "type", description = "audit type to match", schema =

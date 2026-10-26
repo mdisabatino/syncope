@@ -23,23 +23,23 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Collectors;
 import org.apache.syncope.common.lib.to.AuditEventTO;
 import org.apache.syncope.common.lib.types.OpEvent;
 import org.apache.syncope.core.persistence.api.dao.AuditEventDAO;
 import org.apache.syncope.core.persistence.api.entity.AuditEvent;
+import org.apache.syncope.core.persistence.common.dao.AbstractAuditEventDAO;
 import org.apache.syncope.core.persistence.neo4j.entity.Neo4jAuditEvent;
 import org.apache.syncope.core.persistence.neo4j.spring.NodeValidator;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.data.neo4j.core.Neo4jClient;
 import org.springframework.data.neo4j.core.Neo4jTemplate;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.CollectionUtils;
 
-public class Neo4jAuditEventDAO implements AuditEventDAO {
-
-    protected static final Logger LOG = LoggerFactory.getLogger(AuditEventDAO.class);
+public class Neo4jAuditEventDAO extends AbstractAuditEventDAO implements AuditEventDAO {
 
     protected static class AuditEventCriteriaBuilder {
 
@@ -51,6 +51,8 @@ public class Neo4jAuditEventDAO implements AuditEventDAO {
 
         protected AuditEventCriteriaBuilder entityKey(final String entityKey) {
             if (entityKey != null) {
+                checkEntityKey(entityKey);
+
                 query.append(andIfNeeded()).
                         append("(n.before =~ '.*key.*").append(entityKey).append(".*' OR ").
                         append("n.inputs =~ '.*key.*").append(entityKey).append(".*' OR ").
@@ -60,18 +62,37 @@ public class Neo4jAuditEventDAO implements AuditEventDAO {
             return this;
         }
 
+        public AuditEventCriteriaBuilder username(final Set<String> username, final Map<String, Object> parameters) {
+            if (!CollectionUtils.isEmpty(username)) {
+                parameters.put("usernames", username.stream().
+                        map(value -> "\"username\":\"" + escapeForLike(value) + "\"").
+                        toList());
+                query.append(andIfNeeded()).
+                        append("ANY(u IN $usernames WHERE n.before CONTAINS u OR n.inputs CONTAINS u "
+                                + "OR n.output CONTAINS u OR n.throwable CONTAINS u)");
+            }
+            return this;
+        }
+
+        public AuditEventCriteriaBuilder who(final Set<String> who, final Map<String, Object> parameters) {
+            if (!CollectionUtils.isEmpty(who)) {
+                parameters.put("who", List.copyOf(who));
+                query.append(andIfNeeded()).append("n.who IN $who");
+            }
+            return this;
+        }
+
         public AuditEventCriteriaBuilder opEvent(
                 final OpEvent.CategoryType type,
                 final String category,
                 final String subcategory,
                 final String op,
-                final OpEvent.Outcome outcome) {
+                final OpEvent.Outcome outcome,
+                final Map<String, Object> parameters) {
 
-            query.append(andIfNeeded()).
-                    append("n.opEvent =~ '").
-                    append(OpEvent.toString(type, category, subcategory, op, outcome).
-                            replace("[", "\\[").replace("]", "\\]").replace("\\[\\]", "\\[.*\\]")).
-                    append("'");
+            parameters.put("opEvent", toOpEvent(type, category, subcategory, op, outcome).
+                    replace("[", "\\[").replace("]", "\\]").replace("\\[\\]", "\\[.*\\]"));
+            query.append(andIfNeeded()).append("n.opEvent =~ $opEvent");
 
             return this;
         }
@@ -127,6 +148,8 @@ public class Neo4jAuditEventDAO implements AuditEventDAO {
     @Override
     public long count(
             final String entityKey,
+            final Set<String> username,
+            final Set<String> who,
             final OpEvent.CategoryType type,
             final String category,
             final String subcategory,
@@ -138,7 +161,9 @@ public class Neo4jAuditEventDAO implements AuditEventDAO {
         Map<String, Object> parameters = new HashMap<>();
         String query = "MATCH (n:" + Neo4jAuditEvent.NODE + ") "
                 + " WHERE " + criteriaBuilder(entityKey).
-                        opEvent(type, category, subcategory, op, outcome).
+                        username(username, parameters).
+                        who(who, parameters).
+                        opEvent(type, category, subcategory, op, outcome, parameters).
                         before(before, parameters).
                         after(after, parameters).
                         build()
@@ -150,6 +175,8 @@ public class Neo4jAuditEventDAO implements AuditEventDAO {
     @Override
     public List<AuditEventTO> search(
             final String entityKey,
+            final Set<String> username,
+            final Set<String> who,
             final OpEvent.CategoryType type,
             final String category,
             final String subcategory,
@@ -163,14 +190,17 @@ public class Neo4jAuditEventDAO implements AuditEventDAO {
 
         StringBuilder query = new StringBuilder("MATCH (n:" + Neo4jAuditEvent.NODE + ") "
                 + "WHERE " + criteriaBuilder(entityKey).
-                        opEvent(type, category, subcategory, op, outcome).
+                        username(username, parameters).
+                        who(who, parameters).
+                        opEvent(type, category, subcategory, op, outcome, parameters).
                         before(before, parameters).
                         after(after, parameters).
                         build()
                 + " RETURN n.id");
 
-        if (!pageable.getSort().isEmpty()) {
-            query.append(" ORDER BY ").append(pageable.getSort().stream().
+        List<Sort.Order> orderBy = filterOrderBy(pageable.getSort().stream(), Neo4jAuditEvent.class);
+        if (!orderBy.isEmpty()) {
+            query.append(" ORDER BY ").append(orderBy.stream().
                     map(clause -> "n." + clause.getProperty() + ' ' + clause.getDirection().name()).
                     collect(Collectors.joining(",")));
         }

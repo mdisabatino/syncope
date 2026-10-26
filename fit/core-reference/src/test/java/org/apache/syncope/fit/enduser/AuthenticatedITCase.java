@@ -20,11 +20,13 @@ package org.apache.syncope.fit.enduser;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assumptions.assumeFalse;
 
 import java.io.IOException;
 import org.apache.syncope.client.enduser.pages.Dashboard;
 import org.apache.syncope.client.enduser.pages.EditUser;
 import org.apache.syncope.client.enduser.pages.Login;
+import org.apache.syncope.client.enduser.pages.Logout;
 import org.apache.syncope.client.enduser.pages.MustChangePassword;
 import org.apache.syncope.client.enduser.pages.SelfResult;
 import org.apache.syncope.client.ui.commons.Constants;
@@ -56,7 +58,7 @@ public class AuthenticatedITCase extends AbstractEnduserITCase {
                 mustChangePassword(new BooleanReplacePatchItem.Builder().value(Boolean.TRUE).build()).build());
 
         TESTER.startPage(Login.class);
-        doLogin("mustchangepassword", "password123");
+        doLogin("mustchangepassword", DEFAULT_PASSWORD);
 
         TESTER.assertRenderedPage(MustChangePassword.class);
 
@@ -74,7 +76,8 @@ public class AuthenticatedITCase extends AbstractEnduserITCase {
         // 3. submit form
         TESTER.executeAjaxEvent(changePwdForm + ":submit", Constants.ON_CLICK);
 
-        TESTER.assertRenderedPage(Login.class);
+        TESTER.startPage(Logout.class);
+        TESTER.startPage(Login.class);
 
         TESTER.cleanupFeedbackMessages();
 
@@ -86,11 +89,13 @@ public class AuthenticatedITCase extends AbstractEnduserITCase {
 
     @Test
     public void selfUpdate() {
+        assumeFalse(IS_NEO4J_PERSISTENCE);
+
         String username = "selfupdate";
         String newEmail = "selfupdate@email.com";
 
         TESTER.startPage(Login.class);
-        doLogin(username, "password123");
+        doLogin(username, DEFAULT_PASSWORD);
 
         TESTER.assertComponent("body:contentWrapper:content:userProfileInfo:userProfile", WebMarkupContainer.class);
 

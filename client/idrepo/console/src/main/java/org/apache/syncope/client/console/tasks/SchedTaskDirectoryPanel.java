@@ -24,7 +24,6 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Iterator;
 import java.util.List;
-import java.util.concurrent.TimeUnit;
 import org.apache.commons.lang3.SerializationUtils;
 import org.apache.commons.lang3.tuple.Pair;
 import org.apache.syncope.client.console.SyncopeConsoleSession;
@@ -44,7 +43,6 @@ import org.apache.syncope.client.console.wicket.markup.html.form.ActionsPanel;
 import org.apache.syncope.client.console.wicket.ws.BasePageWebSocketBehavior;
 import org.apache.syncope.client.console.widgets.JobActionPanel;
 import org.apache.syncope.client.ui.commons.Constants;
-import org.apache.syncope.client.ui.commons.panels.ModalPanel;
 import org.apache.syncope.client.ui.commons.wizards.AjaxWizard;
 import org.apache.syncope.common.lib.SyncopeClientException;
 import org.apache.syncope.common.lib.to.AnyTO;
@@ -69,7 +67,6 @@ import org.apache.wicket.markup.repeater.Item;
 import org.apache.wicket.model.IModel;
 import org.apache.wicket.model.Model;
 import org.apache.wicket.model.StringResourceModel;
-import org.apache.wicket.protocol.ws.api.WebSocketRequestHandler;
 import org.apache.wicket.spring.injection.annot.SpringBean;
 
 /**
@@ -77,8 +74,7 @@ import org.apache.wicket.spring.injection.annot.SpringBean;
  *
  * @param <T> Sched task type.
  */
-public abstract class SchedTaskDirectoryPanel<T extends SchedTaskTO>
-        extends TaskDirectoryPanel<T> implements ModalPanel {
+public abstract class SchedTaskDirectoryPanel<T extends SchedTaskTO> extends TaskDirectoryPanel<T> {
 
     private static final long serialVersionUID = 4984337552918213290L;
 
@@ -123,16 +119,7 @@ public abstract class SchedTaskDirectoryPanel<T extends SchedTaskTO>
 
         pageRef.getPage().getBehaviors().stream().
                 filter(BasePageWebSocketBehavior.class::isInstance).map(BasePageWebSocketBehavior.class::cast).
-                findFirst().ifPresent(wsb -> wsb.add(new BasePageWebSocketBehavior.OnTimerChild(10, TimeUnit.SECONDS) {
-
-            private static final long serialVersionUID = 532119924423529449L;
-
-            @Override
-            protected void onTimer(final WebSocketRequestHandler handler) {
-                container.modelChanged();
-                handler.add(container);
-            }
-        }));
+                findFirst().ifPresent(wsb -> wsb.add(new OnTimerUpdateResultTable()));
 
         startAt = new TaskStartAtTogglePanel(container, pageRef);
         addInnerObject(startAt);
@@ -197,7 +184,7 @@ public abstract class SchedTaskDirectoryPanel<T extends SchedTaskTO>
                     panel = new JobActionPanel(componentId, jobTO, false, SchedTaskDirectoryPanel.this);
                     MetaDataRoleAuthorizationStrategy.authorize(
                             panel, WebPage.ENABLE,
-                            String.format("%s,%s", IdRepoEntitlement.TASK_EXECUTE, IdRepoEntitlement.TASK_UPDATE));
+                            "%s,%s".formatted(IdRepoEntitlement.TASK_EXECUTE, IdRepoEntitlement.TASK_UPDATE));
                 } catch (Exception e) {
                     LOG.error("Could not get job for task {}", rowModel.getObject().getKey(), e);
                     panel = new Label(componentId, Model.of());

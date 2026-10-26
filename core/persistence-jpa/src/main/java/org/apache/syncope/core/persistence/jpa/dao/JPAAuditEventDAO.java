@@ -24,16 +24,20 @@ import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 import java.util.stream.Collectors;
 import org.apache.syncope.common.lib.to.AuditEventTO;
 import org.apache.syncope.common.lib.types.OpEvent;
 import org.apache.syncope.core.persistence.api.dao.AuditEventDAO;
 import org.apache.syncope.core.persistence.api.entity.AuditEvent;
+import org.apache.syncope.core.persistence.common.dao.AbstractAuditEventDAO;
 import org.apache.syncope.core.persistence.jpa.entity.JPAAuditEvent;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.CollectionUtils;
 
-public class JPAAuditEventDAO implements AuditEventDAO {
+public class JPAAuditEventDAO extends AbstractAuditEventDAO implements AuditEventDAO {
 
     protected static class AuditEventCriteriaBuilder {
 
@@ -50,6 +54,8 @@ public class JPAAuditEventDAO implements AuditEventDAO {
 
         protected AuditEventCriteriaBuilder entityKey(final String entityKey) {
             if (entityKey != null) {
+                checkEntityKey(entityKey);
+
                 query.append(andIfNeeded()).
                         append("(before_value LIKE '%\"key\":\"").append(entityKey).append("\"%' OR ").
                         append("inputs LIKE '%\"key\":\"").append(entityKey).append("\"%' OR ").
@@ -59,17 +65,46 @@ public class JPAAuditEventDAO implements AuditEventDAO {
             return this;
         }
 
+        public AuditEventCriteriaBuilder username(final Set<String> username, final List<Object> parameters) {
+            if (!CollectionUtils.isEmpty(username)) {
+                query.append(andIfNeeded()).
+                        append('(').
+                        append(username.stream().map(value -> {
+                            String pattern = "%\"username\":\"" + escapeForLike(value) + "\"%";
+                            return "(before_value LIKE ?" + setParameter(parameters, pattern) + " ESCAPE '#'"
+                                    + " OR inputs LIKE ?" + setParameter(parameters, pattern) + " ESCAPE '#'"
+                                    + " OR output LIKE ?" + setParameter(parameters, pattern) + " ESCAPE '#'"
+                                    + " OR throwable LIKE ?" + setParameter(parameters, pattern) + " ESCAPE '#')";
+                        }).collect(Collectors.joining(" OR "))).
+                        append(')');
+            }
+            return this;
+        }
+
+        public AuditEventCriteriaBuilder who(final Set<String> who, final List<Object> parameters) {
+            if (!CollectionUtils.isEmpty(who)) {
+                query.append(andIfNeeded()).append("who IN (").
+                        append(who.stream().
+                                map(value -> "?" + setParameter(parameters, value)).
+                                collect(Collectors.joining(", "))).
+                        append(")");
+            }
+            return this;
+        }
+
         public AuditEventCriteriaBuilder opEvent(
                 final OpEvent.CategoryType type,
                 final String category,
                 final String subcategory,
                 final String op,
-                final OpEvent.Outcome outcome) {
+                final OpEvent.Outcome outcome,
+                final List<Object> parameters) {
 
             query.append(andIfNeeded()).
-                    append("opEvent LIKE '").
-                    append(OpEvent.toString(type, category, subcategory, op, outcome).replace("[]", "[%]")).
-                    append("'");
+                    append("opEvent LIKE ?").append(setParameter(
+                    parameters,
+                    toOpEvent(type, category, subcategory, op, outcome).replace("[]", "[%]"))).
+                    append(" ESCAPE '#'");
 
             return this;
         }
@@ -125,6 +160,8 @@ public class JPAAuditEventDAO implements AuditEventDAO {
     @Override
     public long count(
             final String entityKey,
+            final Set<String> username,
+            final Set<String> who,
             final OpEvent.CategoryType type,
             final String category,
             final String subcategory,
@@ -137,7 +174,9 @@ public class JPAAuditEventDAO implements AuditEventDAO {
         String queryString = "SELECT COUNT(0)"
                 + " FROM " + JPAAuditEvent.TABLE
                 + " WHERE" + criteriaBuilder(entityKey).
-                        opEvent(type, category, subcategory, op, outcome).
+                        username(username, parameters).
+                        who(who, parameters).
+                        opEvent(type, category, subcategory, op, outcome, parameters).
                         before(before, parameters).
                         after(after, parameters).
                         build();
@@ -151,6 +190,8 @@ public class JPAAuditEventDAO implements AuditEventDAO {
     @Override
     public List<AuditEventTO> search(
             final String entityKey,
+            final Set<String> username,
+            final Set<String> who,
             final OpEvent.CategoryType type,
             final String category,
             final String subcategory,
@@ -164,14 +205,19 @@ public class JPAAuditEventDAO implements AuditEventDAO {
         String queryString = "SELECT id"
                 + " FROM " + JPAAuditEvent.TABLE
                 + " WHERE" + criteriaBuilder(entityKey).
-                        opEvent(type, category, subcategory, op, outcome).
+                        username(username, parameters).
+                        who(who, parameters).
+                        opEvent(type, category, subcategory, op, outcome, parameters).
                         before(before, parameters).
                         after(after, parameters).
                         build();
-        if (!pageable.getSort().isEmpty()) {
-            queryString += " ORDER BY " + pageable.getSort().stream().
-                    map(clause -> ("when".equals(clause.getProperty()) ? "event_date" : clause.getProperty())
-                    + ' ' + clause.getDirection().name()).
+
+        List<Sort.Order> orderBy = filterOrderBy(pageable.getSort().stream(), JPAAuditEvent.class);
+        if (!orderBy.isEmpty()) {
+            queryString += " ORDER BY " + orderBy.stream().
+                    map(clause -> ("when".equals(clause.getProperty())
+                            ? "event_date"
+                            : clause.getProperty()) + ' ' + clause.getDirection().name()).
                     collect(Collectors.joining(","));
         }
 

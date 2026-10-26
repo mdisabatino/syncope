@@ -28,7 +28,6 @@ import static org.mockito.Mockito.mockStatic;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -36,7 +35,6 @@ import java.util.Optional;
 import org.apache.commons.jexl3.JexlBuilder;
 import org.apache.commons.jexl3.JexlEngine;
 import org.apache.commons.jexl3.MapContext;
-import org.apache.commons.jexl3.introspection.JexlPermissions;
 import org.apache.syncope.common.keymaster.client.api.ConfParamOps;
 import org.apache.syncope.common.lib.Attr;
 import org.apache.syncope.common.lib.SyncopeConstants;
@@ -141,7 +139,7 @@ public class DefaultNotificationManagerTest {
     void init() {
         JexlEngine jexlEngine = new JexlBuilder().
                 loader(new EmptyClassLoader()).
-                permissions(JexlPermissions.RESTRICTED.compose("java.time.*", "org.apache.syncope.*")).
+                permissions(JexlTools.DEFAULT_PERMISSIONS).
                 namespaces(Map.of("syncope", new SyncopeJexlFunctions())).
                 cache(512).
                 silent(false).
@@ -196,7 +194,7 @@ public class DefaultNotificationManagerTest {
         when(userDAO.findById(beforeDelete.getKey())).thenReturn(Optional.empty());
 
         Notification notification = mock(Notification.class);
-        doReturn(Collections.singletonList(notification)).when(notificationDAO).findAll();
+        doReturn(List.of(notification)).when(notificationDAO).findAll();
         when(notification.isActive()).thenReturn(true);
         when(notification.getEvents()).thenReturn(List.of(DELETE_SUCCESS));
         when(notification.getRecipientsFIQL()).thenReturn(null);
@@ -244,7 +242,7 @@ public class DefaultNotificationManagerTest {
     @Test
     void nullBeforeWithMissingEntityDoesNotThrow() {
         Notification notification = mock(Notification.class);
-        doReturn(Collections.singletonList(notification)).when(notificationDAO).findAll();
+        doReturn(List.of(notification)).when(notificationDAO).findAll();
         when(notification.isActive()).thenReturn(true);
         when(notification.getEvents()).thenReturn(List.of(DELETE_SUCCESS));
         when(notification.getRecipientsFIQL()).thenReturn(null);
@@ -276,7 +274,7 @@ public class DefaultNotificationManagerTest {
                     null,
                     "delete",
                     OpEvent.Outcome.SUCCESS,
-                    null,   // before is null
+                    null, // before is null
                     null);
         }
 

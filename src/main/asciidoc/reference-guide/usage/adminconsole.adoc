@@ -32,24 +32,45 @@ image::consoleLogin.png[console-login]
 
 You can use the <<set-admin-credentials,default admin credentials>> to login.
 
+[[admin-console-mfa]]
+==== MFA
+
+When <<authentiation-credentials,MFA is enabled>>, the login flow is slightly different.
+
+First, an app must be enrolled:
+
+image::console-mfa-enroll1.png[console-mfa-enroll1]
+image::console-mfa-enroll2.png[console-mfa-enroll2]
+
+Then, for subsequent logins, the form includes the additional `mfa` field:
+
+[.text-center]
+image::console-mfa-login.png[console-mfa-login]
+
 [[admin-console-accessibility]]
 ==== Accessibility
 
 The Admin UI is accessible to the visually impaired.
 
-The `H` https://developer.mozilla.org/en-US/docs/Web/HTML/Global_attributes/accesskey[accesskey^] shortcut can
-be used to easily toggle "High contrast mode" by using the keyboard.
-In this mode, the website colors are switched to a higher contrast color schema.
+The theme switcher allows choosing between light, dark, and automatic themes.
+The `U`, `L`, and `D` https://developer.mozilla.org/en-US/docs/Web/HTML/Global_attributes/accesskey[accesskey^] shortcuts can
+be used to switch themes using the keyboard.
 
 E.g. 
 |===
 |Shortcut |Purpose
 
-|`Alt` + `Shift` + `H`
-|Toggle "High contrast mode" on Firefox and Chrome browsers on Linux
+|`Alt` + `Shift` + `U`
+|Switch to automatic theme on Firefox and Chrome browsers on Linux
+
+|`Alt` + `Shift` + `L`
+|Switch to light theme on Firefox and Chrome browsers on Linux
+
+|`Alt` + `Shift` + `D`
+|Switch to dark theme on Firefox and Chrome browsers on Linux
 |===
 
-The `F` https://developer.mozilla.org/en-US/docs/Web/HTML/Global_attributes/accesskey[accesskey^] shortcut can
+The `S` https://developer.mozilla.org/en-US/docs/Web/HTML/Global_attributes/accesskey[accesskey^] shortcut can
 be used to easily toggle "Increased font mode" by using the keyboard.
 In this mode, the website font size is increased.
 
@@ -57,7 +78,7 @@ E.g.
 |===
 |Shortcut |Purpose
 
-|`Alt` + `Shift` + `F`
+|`Alt` + `Shift` + `S`
 |Toggle "Increased font mode" on Firefox and Chrome browsers on Linux
 |===
 

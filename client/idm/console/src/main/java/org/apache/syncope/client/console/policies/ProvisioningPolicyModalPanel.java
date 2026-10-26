@@ -21,7 +21,7 @@ package org.apache.syncope.client.console.policies;
 import com.fasterxml.jackson.databind.json.JsonMapper;
 import java.io.Serializable;
 import java.util.ArrayList;
-import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -38,9 +38,9 @@ import org.apache.syncope.client.console.wicket.markup.html.bootstrap.dialog.Bas
 import org.apache.syncope.client.console.wicket.markup.html.form.MultiPanel;
 import org.apache.syncope.client.ui.commons.Constants;
 import org.apache.syncope.client.ui.commons.ajax.form.IndicatorAjaxFormComponentUpdatingBehavior;
-import org.apache.syncope.client.ui.commons.markup.html.form.AjaxCheckBoxPanel;
 import org.apache.syncope.client.ui.commons.markup.html.form.AjaxDropDownChoicePanel;
 import org.apache.syncope.client.ui.commons.markup.html.form.AjaxPalettePanel;
+import org.apache.syncope.client.ui.commons.markup.html.form.AjaxTripleStateButtonPanel;
 import org.apache.syncope.client.ui.commons.pages.BaseWebPage;
 import org.apache.syncope.common.lib.policy.AbstractCorrelationRuleConf;
 import org.apache.syncope.common.lib.policy.DefaultInboundCorrelationRuleConf;
@@ -236,7 +236,9 @@ public class ProvisioningPolicyModalPanel extends AbstractModalPanel<Provisionin
                     }
                 }
             };
-            AjaxCheckBoxPanel orSchemas = new AjaxCheckBoxPanel("orSchemas", "orSchemas", orSchemasModel, false);
+            AjaxTripleStateButtonPanel orSchemas = new AjaxTripleStateButtonPanel(
+                    "orSchemas", "orSchemas", orSchemasModel, false);
+            orSchemas.addRequiredLabel();
             orSchemas.setOutputMarkupPlaceholderTag(true);
             add(orSchemas.setVisible(correlationRule.getObject().getDefaultRuleConf() != null));
 
@@ -334,7 +336,7 @@ public class ProvisioningPolicyModalPanel extends AbstractModalPanel<Provisionin
             choices.add(Constants.KEY_FIELD_NAME);
             choices.add(rule.getAnyType().equals(AnyTypeKind.USER.name())
                     ? Constants.USERNAME_FIELD_NAME : Constants.NAME_FIELD_NAME);
-            Collections.sort(choices);
+            choices.sort(Comparator.naturalOrder());
             return choices;
         }
     }

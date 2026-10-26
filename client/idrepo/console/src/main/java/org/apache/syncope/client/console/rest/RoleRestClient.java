@@ -18,11 +18,10 @@
  */
 package org.apache.syncope.client.console.rest;
 
+import java.io.ByteArrayInputStream;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
-import java.util.stream.Collectors;
-import org.apache.commons.io.IOUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.syncope.client.console.SyncopeConsoleSession;
 import org.apache.syncope.common.lib.SyncopeClientException;
@@ -59,8 +58,8 @@ public class RoleRestClient extends BaseRestClient {
 
     public String readAnyLayout(final String role) {
         try {
-            return IOUtils.toString(InputStream.class.cast(
-                    getService(RoleService.class).getAnyLayout(role).getEntity()),
+            return new String(InputStream.class.cast(
+                    getService(RoleService.class).getAnyLayout(role).getEntity()).readAllBytes(),
                     StandardCharsets.UTF_8);
         } catch (SyncopeClientException e) {
             if (e.getType() == ClientExceptionType.NotFound) {
@@ -76,7 +75,7 @@ public class RoleRestClient extends BaseRestClient {
 
     public void setAnyLayout(final String roleKey, final String content) {
         getService(RoleService.class).setAnyLayout(
-                roleKey, IOUtils.toInputStream(content, StandardCharsets.UTF_8));
+                roleKey, new ByteArrayInputStream(content.getBytes(StandardCharsets.UTF_8)));
     }
 
     public void removeAnyLayout(final String roleKey) {
@@ -84,7 +83,6 @@ public class RoleRestClient extends BaseRestClient {
     }
 
     public List<String> getAllAvailableEntitlements() {
-        return SyncopeConsoleSession.get().getAnonymousClient().platform().getEntitlements().
-                stream().sorted().collect(Collectors.toList());
+        return SyncopeConsoleSession.get().getPlatformInfo().entitlements().stream().sorted().toList();
     }
 }

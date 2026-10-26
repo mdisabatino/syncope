@@ -56,6 +56,7 @@ import org.apache.syncope.core.provisioning.api.pushpull.SyncopePushExecutor;
 import org.apache.syncope.core.provisioning.api.pushpull.SyncopePushResultHandler;
 import org.apache.syncope.core.provisioning.api.pushpull.UserPushResultHandler;
 import org.apache.syncope.core.spring.implementation.ImplementationManager;
+import org.apache.syncope.core.spring.security.AuthContextUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.data.domain.PageRequest;
@@ -138,12 +139,13 @@ public class PushJobDelegate
         return ctx.getBeanFactory().createBean(DefaultGroupPushResultHandler.class);
     }
 
-    protected List<PushActions> getPushActions(final List<? extends Implementation> impls) {
+    protected List<PushActions> getPushActions(final String domain, final List<? extends Implementation> impls) {
         List<PushActions> result = new ArrayList<>();
 
         impls.forEach(impl -> {
             try {
                 result.add(ImplementationManager.build(
+                        domain,
                         impl,
                         () -> perContextActions.get(impl.getKey()),
                         instance -> perContextActions.put(impl.getKey(), instance)));
@@ -170,9 +172,9 @@ public class PushJobDelegate
                 Optional.ofNullable(task.getResource().getPushPolicy()).
                         map(PushPolicy::getConflictResolutionAction).
                         orElse(ConflictResolutionAction.IGNORE),
-                getPushActions(task.getActions()),
-                executor,
-                context.isDryRun());
+                getPushActions(context.domain(), task.getActions()),
+                AuthContextUtils.getUsername(),
+                context.dryRun());
     }
 
     @Override
@@ -226,7 +228,7 @@ public class PushJobDelegate
         }
 
         // ...then provisions for any types
-        ProvisionSorter provisionSorter = getProvisionSorter(task);
+        ProvisionSorter provisionSorter = getProvisionSorter(context.domain(), task);
 
         for (Provision provision : task.getResource().getProvisions().stream().
                 filter(provision -> provision.getMapping() != null).sorted(provisionSorter).
@@ -289,7 +291,7 @@ public class PushJobDelegate
 
         setStatus("Push done");
 
-        String result = createReport(profile.getResults(), task.getResource(), context.isDryRun());
+        String result = createReport(profile.getResults(), task.getResource(), context.dryRun());
         LOG.debug("Push result: {}", result);
         return result;
     }

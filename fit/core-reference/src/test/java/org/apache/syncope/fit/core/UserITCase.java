@@ -29,6 +29,7 @@ import static org.junit.jupiter.api.Assertions.fail;
 import static org.junit.jupiter.api.Assumptions.assumeFalse;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import jakarta.ws.rs.NotAuthorizedException;
 import jakarta.ws.rs.core.GenericType;
 import jakarta.ws.rs.core.Response;
@@ -39,6 +40,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Function;
@@ -47,6 +49,7 @@ import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.cxf.jaxrs.client.WebClient;
 import org.apache.syncope.client.lib.SyncopeClient;
 import org.apache.syncope.client.lib.batch.BatchRequest;
+import org.apache.syncope.common.keymaster.client.api.StandardConfParams;
 import org.apache.syncope.common.lib.Attr;
 import org.apache.syncope.common.lib.SyncopeClientException;
 import org.apache.syncope.common.lib.SyncopeConstants;
@@ -111,7 +114,7 @@ public class UserITCase extends AbstractITCase {
 
     public static UserCR getSample(final String email) {
         return new UserCR.Builder(SyncopeConstants.ROOT_REALM, email).
-                password("password123").
+                password(DEFAULT_PASSWORD).
                 plainAttr(attr("fullname", email)).
                 plainAttr(attr("firstname", email)).
                 plainAttr(attr("surname", "surname")).
@@ -138,7 +141,7 @@ public class UserITCase extends AbstractITCase {
     public void createUserWithNoPropagation() {
         // create a new user
         UserCR req = getUniqueSample("xxx@xxx.xxx");
-        req.setPassword("password123");
+        req.setPassword(DEFAULT_PASSWORD);
         req.getResources().add(RESOURCE_NAME_NOPROPAGATION);
 
         UserTO userTO = createUser(req).getEntity();
@@ -344,7 +347,7 @@ public class UserITCase extends AbstractITCase {
 
         // 3. verify password
         try {
-            SyncopeClient.Self self = CLIENT_FACTORY.create(userTO.getUsername(), "password123").self();
+            SyncopeClient.Self self = CLIENT_FACTORY.create(userTO.getUsername(), DEFAULT_PASSWORD).self();
             assertNotNull(self);
         } catch (NotAuthorizedException e) {
             fail("Credentials should be valid and not cause NotAuthorizedException");
@@ -494,13 +497,12 @@ public class UserITCase extends AbstractITCase {
     }
 
     @Test
-    public void read() {
+    public void read() throws JsonProcessingException {
         UserTO userTO = USER_SERVICE.read("1417acbe-cbf6-4277-9372-e75e04f97000");
-
         assertNotNull(userTO);
-        assertNull(userTO.getPassword());
         assertNotNull(userTO.getPlainAttrs());
         assertFalse(userTO.getPlainAttrs().isEmpty());
+        assertNotNull(getPassword(userTO.getKey()));
     }
 
     @Test
@@ -539,6 +541,8 @@ public class UserITCase extends AbstractITCase {
 
     @Test
     public void updateSamePassword() {
+        assumeFalse(IS_NEO4J_PERSISTENCE);
+
         assertThrows(SyncopeClientException.class, () -> {
             UserCR userCR = getUniqueSample("updatesame@password.com");
             userCR.setRealm("/even/two");
@@ -548,7 +552,7 @@ public class UserITCase extends AbstractITCase {
 
             UserUR userUR = new UserUR();
             userUR.setKey(userTO.getKey());
-            userUR.setPassword(new PasswordPatch.Builder().value("password123").build());
+            userUR.setPassword(new PasswordPatch.Builder().value(DEFAULT_PASSWORD).build());
 
             USER_SERVICE.update(userUR);
         });
@@ -637,7 +641,6 @@ public class UserITCase extends AbstractITCase {
         assertTrue(beforeTasks < afterTasks);
     }
 
-    @SuppressWarnings("unchecked")
     @Test
     public void verifyTaskRegistration() {
         // get task list
@@ -729,42 +732,42 @@ public class UserITCase extends AbstractITCase {
         assumeTrue(IS_FLOWABLE_ENABLED);
 
         UserCR userCR = getUniqueSample("createActivate@syncope.apache.org");
-
         userCR.getMemberships().add(new MembershipTO.Builder("268fed79-f440-4390-9435-b273768eb5d6").build());
 
         UserTO userTO = createUser(userCR).getEntity();
-
         assertNotNull(userTO);
-        assertNotNull(userTO.getToken());
-        assertNotNull(userTO.getTokenExpireTime());
-
         assertEquals("created", userTO.getStatus());
 
-        StatusR statusR = new StatusR.Builder(userTO.getKey(), StatusRType.ACTIVATE).token(userTO.getToken()).build();
+        Map<String, Object> map = getToken(userTO.getKey());
+        assertNotNull(map.get("token"));
+        assertNotNull(map.get("tokenExpireTime"));
+
+        StatusR statusR = new StatusR.Builder(userTO.getKey(), StatusRType.ACTIVATE).
+                token(map.get("token").toString()).build();
 
         userTO = USER_SERVICE.status(statusR).readEntity(new GenericType<ProvisioningResult<UserTO>>() {
         }).getEntity();
-
         assertNotNull(userTO);
-        assertNull(userTO.getToken());
-        assertNull(userTO.getTokenExpireTime());
         assertEquals("active", userTO.getStatus());
+
+        map = getToken(userTO.getKey());
+        assertNull(map.get("token"));
+        assertNull(map.get("tokenExpireTime"));
     }
 
     @Test
     public void suspendReactivate() {
         UserCR userCR = getUniqueSample("suspendReactivate@syncope.apache.org");
-
         userCR.getMemberships().add(new MembershipTO.Builder("bf825fe1-7320-4a54-bd64-143b5c18ab97").build());
 
         UserTO userTO = createUser(userCR).getEntity();
-
         assertNotNull(userTO);
         assertEquals(IS_FLOWABLE_ENABLED
                 ? "active"
                 : "created", userTO.getStatus());
 
-        StatusR statusR = new StatusR.Builder(userTO.getKey(), StatusRType.SUSPEND).token(userTO.getToken()).build();
+        String token = Optional.ofNullable(getToken(userTO.getKey()).get("token")).map(Object::toString).orElse(null);
+        StatusR statusR = new StatusR.Builder(userTO.getKey(), StatusRType.SUSPEND).token(token).build();
 
         userTO = USER_SERVICE.status(statusR).readEntity(new GenericType<ProvisioningResult<UserTO>>() {
         }).getEntity();
@@ -1201,7 +1204,7 @@ public class UserITCase extends AbstractITCase {
         }
 
         ResourceAR resourceAR = new ResourceAR.Builder().key(actual.getKey()).
-                value("password123").action(ResourceAssociationAction.ASSIGN).resource(RESOURCE_NAME_CSV).build();
+                value(DEFAULT_PASSWORD).action(ResourceAssociationAction.ASSIGN).resource(RESOURCE_NAME_CSV).build();
 
         assertNotNull(parseBatchResponse(USER_SERVICE.associate(resourceAR)));
 
@@ -1395,9 +1398,9 @@ public class UserITCase extends AbstractITCase {
     }
 
     @Test
-    public void verifySecurityAnswer() throws Exception {
+    public void verifySecurityAnswer() {
         // 0. ensure that password request DOES require security question
-        confParamOps.set(SyncopeConstants.MASTER_DOMAIN, "passwordReset.securityQuestion", true);
+        confParamOps.set(SyncopeConstants.MASTER_DOMAIN, StandardConfParams.PASSWORD_RESET_SECURITY_QUESTION, true);
 
         // 1. create an user with security question and answer
         UserCR user = UserITCase.getUniqueSample("pwdReset@syncope.apache.org");

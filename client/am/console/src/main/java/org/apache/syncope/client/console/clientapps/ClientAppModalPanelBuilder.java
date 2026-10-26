@@ -45,11 +45,11 @@ import org.apache.syncope.client.console.wicket.markup.html.form.AjaxSearchField
 import org.apache.syncope.client.console.wicket.markup.html.form.PolicyRenderer;
 import org.apache.syncope.client.ui.commons.Constants;
 import org.apache.syncope.client.ui.commons.ajax.form.IndicatorAjaxFormComponentUpdatingBehavior;
-import org.apache.syncope.client.ui.commons.markup.html.form.AjaxCheckBoxPanel;
 import org.apache.syncope.client.ui.commons.markup.html.form.AjaxDropDownChoicePanel;
 import org.apache.syncope.client.ui.commons.markup.html.form.AjaxNumberFieldPanel;
 import org.apache.syncope.client.ui.commons.markup.html.form.AjaxPalettePanel;
 import org.apache.syncope.client.ui.commons.markup.html.form.AjaxTextFieldPanel;
+import org.apache.syncope.client.ui.commons.markup.html.form.AjaxTripleStateButtonPanel;
 import org.apache.syncope.client.ui.commons.markup.html.form.BinaryFieldPanel;
 import org.apache.syncope.client.ui.commons.markup.html.form.MultiFieldPanel;
 import org.apache.syncope.client.ui.commons.pages.BaseWebPage;
@@ -64,6 +64,7 @@ import org.apache.syncope.common.lib.to.RealmTO;
 import org.apache.syncope.common.lib.to.SAML2SPClientAppTO;
 import org.apache.syncope.common.lib.types.ClientAppType;
 import org.apache.syncope.common.lib.types.LogoutType;
+import org.apache.syncope.common.lib.types.MetadataCriteriaDirection;
 import org.apache.syncope.common.lib.types.OIDCApplicationType;
 import org.apache.syncope.common.lib.types.OIDCClientAuthenticationMethod;
 import org.apache.syncope.common.lib.types.OIDCGrantType;
@@ -73,7 +74,9 @@ import org.apache.syncope.common.lib.types.OIDCTokenEncryptionAlg;
 import org.apache.syncope.common.lib.types.OIDCTokenEncryptionEncoding;
 import org.apache.syncope.common.lib.types.OIDCTokenSigningAlg;
 import org.apache.syncope.common.lib.types.PolicyType;
+import org.apache.syncope.common.lib.types.SAML2BindingType;
 import org.apache.syncope.common.lib.types.SAML2SPNameId;
+import org.apache.syncope.common.lib.types.SigningCredentialType;
 import org.apache.syncope.common.lib.types.XmlSecAlgorithm;
 import org.apache.syncope.common.rest.api.service.SAML2IdPEntityService;
 import org.apache.wicket.Component;
@@ -315,16 +318,18 @@ public class ClientAppModalPanelBuilder<T extends ClientAppTO> extends AbstractM
                             "field", "idTokenIssuer", new PropertyModel<>(clientAppTO, "idTokenIssuer"), false);
                     fields.add(idTokenIssuer);
 
-                    AjaxCheckBoxPanel signIdToken = new AjaxCheckBoxPanel(
+                    AjaxTripleStateButtonPanel signIdToken = new AjaxTripleStateButtonPanel(
                             "field", "signIdToken", new PropertyModel<>(clientAppTO, "signIdToken"));
+                    signIdToken.addRequiredLabel();
                     fields.add(signIdToken);
                     AjaxDropDownChoicePanel<OIDCTokenSigningAlg> idTokenSigningAlg = new AjaxDropDownChoicePanel<>(
                             "field", "idTokenSigningAlg", new PropertyModel<>(clientAppTO, "idTokenSigningAlg"), false);
                     idTokenSigningAlg.setChoices(List.of(OIDCTokenSigningAlg.values()));
                     fields.add(idTokenSigningAlg.addRequiredLabel());
 
-                    fields.add(new AjaxCheckBoxPanel(
-                            "field", "encryptIdToken", new PropertyModel<>(clientAppTO, "encryptIdToken")));
+                    fields.add(new AjaxTripleStateButtonPanel(
+                            "field", "encryptIdToken", new PropertyModel<>(clientAppTO, "encryptIdToken")).
+                                addRequiredLabel());
                     AjaxDropDownChoicePanel<OIDCTokenEncryptionAlg> idTokenEncryptionAlg =
                             new AjaxDropDownChoicePanel<>(
                                     "field",
@@ -366,12 +371,15 @@ public class ClientAppModalPanelBuilder<T extends ClientAppTO> extends AbstractM
                     userInfoEncryptedResponseEncoding.setChoices(List.of(OIDCTokenEncryptionEncoding.values()));
                     fields.add(userInfoEncryptedResponseEncoding);
 
-                    fields.add(new AjaxCheckBoxPanel(
-                            "field", "jwtAccessToken", new PropertyModel<>(clientAppTO, "jwtAccessToken")));
-                    fields.add(new AjaxCheckBoxPanel(
-                            "field", "bypassApprovalPrompt", new PropertyModel<>(clientAppTO, "bypassApprovalPrompt")));
-                    fields.add(new AjaxCheckBoxPanel(
-                            "field", "generateRefreshToken", new PropertyModel<>(clientAppTO, "generateRefreshToken")));
+                    fields.add(new AjaxTripleStateButtonPanel(
+                            "field", "jwtAccessToken", new PropertyModel<>(clientAppTO, "jwtAccessToken")).
+                                addRequiredLabel());
+                    fields.add(new AjaxTripleStateButtonPanel(
+                            "field", "bypassApprovalPrompt", new PropertyModel<>(clientAppTO, "bypassApprovalPrompt")).
+                                addRequiredLabel());
+                    fields.add(new AjaxTripleStateButtonPanel(
+                            "field", "generateRefreshToken", new PropertyModel<>(clientAppTO, "generateRefreshToken")).
+                                addRequiredLabel());
 
                     AjaxDropDownChoicePanel<OIDCSubjectType> subjectType = new AjaxDropDownChoicePanel<>(
                             "field", "subjectType", new PropertyModel<>(clientAppTO, "subjectType"), false);
@@ -518,17 +526,141 @@ public class ClientAppModalPanelBuilder<T extends ClientAppTO> extends AbstractM
                             "field", "metadataSignatureLocation",
                             new PropertyModel<>(clientAppTO, "metadataSignatureLocation"), false));
 
-                    fields.add(new AjaxCheckBoxPanel(
-                            "field", "signAssertions", new PropertyModel<>(clientAppTO, "signAssertions")));
+                    AjaxDropDownChoicePanel<MetadataCriteriaDirection> metadataCriteriaDirection =
+                        new AjaxDropDownChoicePanel<>(
+                            "field", "metadataCriteriaDirection",
+                            new PropertyModel<>(clientAppTO, "metadataCriteriaDirection"),
+                            false);
+                    metadataCriteriaDirection.setChoices(List.of(MetadataCriteriaDirection.values()));
+                    fields.add(metadataCriteriaDirection);
 
-                    fields.add(new AjaxCheckBoxPanel(
-                            "field", "signResponses", new PropertyModel<>(clientAppTO, "signResponses")));
+                    fields.add(new AjaxTextFieldPanel(
+                        "field", "metadataCriteriaPattern",
+                        new PropertyModel<>(clientAppTO, "metadataCriteriaPattern"), false));
 
-                    fields.add(new AjaxCheckBoxPanel(
-                            "field", "encryptionOptional", new PropertyModel<>(clientAppTO, "encryptionOptional")));
+                    fields.add(new AjaxTextFieldPanel(
+                        "field", "subjectLocality",
+                        new PropertyModel<>(clientAppTO, "subjectLocality"), false));
 
-                    fields.add(new AjaxCheckBoxPanel(
-                            "field", "encryptAssertions", new PropertyModel<>(clientAppTO, "encryptAssertions")));
+                    AjaxDropDownChoicePanel<SigningCredentialType> signingCredentialType =
+                        new AjaxDropDownChoicePanel<>(
+                        "field", "signingCredentialType",
+                            new PropertyModel<>(clientAppTO, "signingCredentialType"),
+                        false);
+                    signingCredentialType.setChoices(List.of(SigningCredentialType.values()));
+                    fields.add(signingCredentialType);
+
+                    AjaxDropDownChoicePanel<SAML2BindingType> logoutResponseBinding =
+                        new AjaxDropDownChoicePanel<>(
+                            "field", "logoutResponseBinding",
+                            new PropertyModel<>(clientAppTO, "logoutResponseBinding"),
+                            false);
+                    logoutResponseBinding.setChoices(List.of(SAML2BindingType.values()));
+                    fields.add(logoutResponseBinding);
+
+                    fields.add(new AjaxTripleStateButtonPanel(
+                        "field", "logoutResponseEnabled",
+                        new PropertyModel<>(clientAppTO, "logoutResponseEnabled")).addRequiredLabel());
+
+                    fields.add(new AjaxTripleStateButtonPanel(
+                        "field", "requireSignedRoot",
+                        new PropertyModel<>(clientAppTO, "requireSignedRoot")).addRequiredLabel());
+
+                    fields.add(new AjaxTripleStateButtonPanel(
+                            "field", "signAssertions", new PropertyModel<>(clientAppTO, "signAssertions")).
+                                addRequiredLabel());
+
+                    fields.add(new AjaxTripleStateButtonPanel(
+                            "field", "signResponses", new PropertyModel<>(clientAppTO, "signResponses")).
+                                addRequiredLabel());
+
+                    fields.add(new AjaxTripleStateButtonPanel(
+                            "field", "encryptionOptional", new PropertyModel<>(clientAppTO, "encryptionOptional")).
+                                addRequiredLabel());
+
+                    fields.add(new AjaxTripleStateButtonPanel(
+                            "field", "encryptAssertions", new PropertyModel<>(clientAppTO, "encryptAssertions")).
+                                addRequiredLabel());
+
+                    fields.add(new AjaxTripleStateButtonPanel(
+                        "field", "encryptAttributes",
+                        new PropertyModel<>(clientAppTO, "encryptAttributes")).addRequiredLabel());
+                    
+                    fields.add(new AjaxTripleStateButtonPanel(
+                        "field", "skipGeneratingAssertionNameId",
+                        new PropertyModel<>(clientAppTO, "skipGeneratingAssertionNameId")).addRequiredLabel());
+
+                    fields.add(new AjaxTripleStateButtonPanel(
+                        "field", "skipGeneratingSubjectConfirmationInResponseTo",
+                        new PropertyModel<>(clientAppTO, "skipGeneratingSubjectConfirmationInResponseTo")).
+                            addRequiredLabel());
+
+                    fields.add(new AjaxTripleStateButtonPanel(
+                        "field", "skipGeneratingResponseInResponseTo",
+                        new PropertyModel<>(clientAppTO, "skipGeneratingResponseInResponseTo")).addRequiredLabel());
+
+                    fields.add(new AjaxTripleStateButtonPanel(
+                        "field", "skipGeneratingSubjectConfirmationNotOnOrAfter",
+                        new PropertyModel<>(clientAppTO, "skipGeneratingSubjectConfirmationNotOnOrAfter")).
+                            addRequiredLabel());
+
+                    fields.add(new AjaxTripleStateButtonPanel(
+                        "field", "skipGeneratingSubjectConfirmationRecipient",
+                        new PropertyModel<>(clientAppTO, "skipGeneratingSubjectConfirmationRecipient")).
+                            addRequiredLabel());
+
+                    fields.add(new AjaxTripleStateButtonPanel(
+                        "field", "skipGeneratingSubjectConfirmationRecipient",
+                        new PropertyModel<>(clientAppTO, "skipGeneratingSubjectConfirmationRecipient")).
+                            addRequiredLabel());
+
+                    fields.add(new AjaxTripleStateButtonPanel(
+                            "field", "skipGeneratingSubjectConfirmationAddress", 
+                        new PropertyModel<>(clientAppTO, "skipGeneratingSubjectConfirmationAddress")).
+                            addRequiredLabel());
+
+                    fields.add(new AjaxTripleStateButtonPanel(
+                        "field", "skipGeneratingSubjectConfirmationNotBefore",
+                        new PropertyModel<>(clientAppTO, "skipGeneratingSubjectConfirmationNotBefore")).
+                            addRequiredLabel());
+
+                    fields.add(new AjaxTripleStateButtonPanel(
+                        "field", "skipGeneratingSubjectConfirmationNameId",
+                        new PropertyModel<>(clientAppTO, "skipGeneratingSubjectConfirmationNameId")).
+                        addRequiredLabel());
+
+                    fields.add(new AjaxTripleStateButtonPanel(
+                        "field", "skipGeneratingNameIdQualifiers",
+                        new PropertyModel<>(clientAppTO, "skipGeneratingNameIdQualifiers")).addRequiredLabel());
+
+                    fields.add(new AjaxTripleStateButtonPanel(
+                        "field", "skipGeneratingTransientNameId",
+                        new PropertyModel<>(clientAppTO, "skipGeneratingTransientNameId")).addRequiredLabel());
+
+                    fields.add(new AjaxTripleStateButtonPanel(
+                        "field", "skipValidatingAuthnRequest",
+                        new PropertyModel<>(clientAppTO, "skipValidatingAuthnRequest")).addRequiredLabel());
+
+                    fields.add(new AjaxTripleStateButtonPanel(
+                        "field", "skipGeneratingServiceProviderNameIdQualifier",
+                        new PropertyModel<>(clientAppTO, "skipGeneratingServiceProviderNameIdQualifier")).
+                            addRequiredLabel());
+
+                    fields.add(new AjaxTripleStateButtonPanel(
+                        "field", "skipGeneratingAuthenticatingAuthority",
+                        new PropertyModel<>(clientAppTO, "skipGeneratingAuthenticatingAuthority")).addRequiredLabel());
+
+                    fields.add(new AjaxTripleStateButtonPanel(
+                        "field", "skipGeneratingNameIdQualifier",
+                        new PropertyModel<>(clientAppTO, "skipGeneratingNameIdQualifier")).addRequiredLabel());
+
+                    fields.add(new AjaxTripleStateButtonPanel(
+                        "field", "skipGeneratingSessionNotOnOrAfter",
+                        new PropertyModel<>(clientAppTO, "skipGeneratingSessionNotOnOrAfter")).addRequiredLabel());
+
+                    fields.add(new AjaxTripleStateButtonPanel(
+                        "field", "validateMetadataCertificates",
+                        new PropertyModel<>(clientAppTO, "validateMetadataCertificates")).addRequiredLabel());
 
                     fields.add(new AjaxTextFieldPanel(
                             "field", "requiredAuthenticationContextClass",

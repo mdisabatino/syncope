@@ -25,6 +25,74 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 @ConfigurationProperties("security")
 public class SecurityProperties {
 
+    public static class ThrottleProperties {
+
+        private boolean enabled = true;
+
+        private int maxAttempts = 5;
+
+        private long windowSeconds = 60;
+
+        private long lockSeconds = 60;
+
+        public boolean isEnabled() {
+            return enabled;
+        }
+
+        public void setEnabled(final boolean enabled) {
+            this.enabled = enabled;
+        }
+
+        public int getMaxAttempts() {
+            return maxAttempts;
+        }
+
+        public void setMaxAttempts(final int maxAttempts) {
+            this.maxAttempts = maxAttempts;
+        }
+
+        public long getWindowSeconds() {
+            return windowSeconds;
+        }
+
+        public void setWindowSeconds(final long windowSeconds) {
+            this.windowSeconds = windowSeconds;
+        }
+
+        public long getLockSeconds() {
+            return lockSeconds;
+        }
+
+        public void setLockSeconds(final long lockSeconds) {
+            this.lockSeconds = lockSeconds;
+        }
+    }
+
+    public static class AuthenticationErrorProperties {
+
+        public static final String DEFAULT_GENERIC_MESSAGE = "Authentication failed";
+
+        private boolean exposeDetails = false;
+
+        private String genericMessage = DEFAULT_GENERIC_MESSAGE;
+
+        public boolean isExposeDetails() {
+            return exposeDetails;
+        }
+
+        public void setExposeDetails(final boolean exposeDetails) {
+            this.exposeDetails = exposeDetails;
+        }
+
+        public String getGenericMessage() {
+            return genericMessage;
+        }
+
+        public void setGenericMessage(final String genericMessage) {
+            this.genericMessage = genericMessage;
+        }
+    }
+
     public static class DigesterProperties {
 
         private int saltIterations = 1;
@@ -82,11 +150,15 @@ public class SecurityProperties {
         }
     }
 
+    private boolean productionMode = true;
+
     private String adminUser;
 
     private String adminPassword;
 
     private CipherAlgorithm adminPasswordAlgorithm;
+
+    private String adminMfaSecret;
 
     private String anonymousUser;
 
@@ -102,7 +174,23 @@ public class SecurityProperties {
 
     private String groovyBlacklist = "classpath:META-INF/groovy.blacklist";
 
+    private final ThrottleProperties authenticationThrottle = new ThrottleProperties();
+
+    private boolean passwordResetHideDetails = true;
+
+    private final ThrottleProperties passwordResetThrottle = new ThrottleProperties();
+
+    private final AuthenticationErrorProperties authenticationError = new AuthenticationErrorProperties();
+
     private final DigesterProperties digester = new DigesterProperties();
+
+    public boolean isProductionMode() {
+        return productionMode;
+    }
+
+    public void setProductionMode(final boolean productionMode) {
+        this.productionMode = productionMode;
+    }
 
     public String getAdminUser() {
         return adminUser;
@@ -126,6 +214,14 @@ public class SecurityProperties {
 
     public void setAdminPasswordAlgorithm(final CipherAlgorithm adminPasswordAlgorithm) {
         this.adminPasswordAlgorithm = adminPasswordAlgorithm;
+    }
+
+    public String getAdminMfaSecret() {
+        return adminMfaSecret;
+    }
+
+    public void setAdminMfaSecret(final String adminMfaSecret) {
+        this.adminMfaSecret = adminMfaSecret;
     }
 
     public String getAnonymousUser() {
@@ -182,6 +278,26 @@ public class SecurityProperties {
 
     public void setGroovyBlacklist(final String groovyBlacklist) {
         this.groovyBlacklist = groovyBlacklist;
+    }
+
+    public SecurityProperties.ThrottleProperties getAuthenticationThrottle() {
+        return authenticationThrottle;
+    }
+
+    public boolean isPasswordResetHideDetails() {
+        return passwordResetHideDetails;
+    }
+
+    public void setPasswordResetHideDetails(final boolean passwordResetHideDetails) {
+        this.passwordResetHideDetails = passwordResetHideDetails;
+    }
+
+    public ThrottleProperties getPasswordResetThrottle() {
+        return passwordResetThrottle;
+    }
+
+    public AuthenticationErrorProperties getAuthenticationError() {
+        return authenticationError;
     }
 
     public DigesterProperties getDigester() {

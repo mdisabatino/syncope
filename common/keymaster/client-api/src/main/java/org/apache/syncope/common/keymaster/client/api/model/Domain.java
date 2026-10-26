@@ -23,10 +23,10 @@ import com.fasterxml.jackson.annotation.JsonPropertyOrder;
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
 import java.io.IOException;
 import java.io.Serializable;
+import java.nio.charset.StandardCharsets;
 import org.apache.commons.lang3.builder.EqualsBuilder;
 import org.apache.commons.lang3.builder.HashCodeBuilder;
 import org.apache.commons.lang3.builder.ToStringBuilder;
-import org.apache.cxf.helpers.IOUtils;
 import org.apache.syncope.common.lib.types.CipherAlgorithm;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -80,7 +80,7 @@ public abstract class Domain implements Serializable {
     protected static String read(final String filename) {
         String read = null;
         try {
-            read = IOUtils.toString(Domain.class.getResourceAsStream('/' + filename));
+            read = new String(Domain.class.getResourceAsStream('/' + filename).readAllBytes(), StandardCharsets.UTF_8);
         } catch (IOException e) {
             LOG.error("Could not read {}", filename, e);
         }
@@ -93,6 +93,8 @@ public abstract class Domain implements Serializable {
     protected String adminPassword;
 
     protected CipherAlgorithm adminCipherAlgorithm = CipherAlgorithm.SHA512;
+
+    private String adminMfaSecret;
 
     protected String content;
 
@@ -127,6 +129,14 @@ public abstract class Domain implements Serializable {
 
     public void setAdminCipherAlgorithm(final CipherAlgorithm adminCipherAlgorithm) {
         this.adminCipherAlgorithm = adminCipherAlgorithm;
+    }
+
+    public String getAdminMfaSecret() {
+        return adminMfaSecret;
+    }
+
+    public void setAdminMfaSecret(final String adminMfaSecret) {
+        this.adminMfaSecret = adminMfaSecret;
     }
 
     protected abstract String defaultContentFile();

@@ -24,6 +24,7 @@ import java.util.Collection;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import org.apache.commons.lang3.ArrayUtils;
 import org.apache.syncope.common.lib.SyncopeClientException;
@@ -77,7 +78,7 @@ import org.springframework.transaction.annotation.Transactional;
  * Note that this controller does not extend {@link AbstractTransactionalLogic}, hence does not provide any
  * Spring's Transactional logic at class level.
  */
-public class GroupLogic extends AbstractAnyLogic<GroupTO, GroupCR, GroupUR> {
+public class GroupLogic extends AbstractAnyLogic<GroupTO, GroupCR, GroupUR> implements GroupLogicOp {
 
     protected final UserDAO userDAO;
 
@@ -145,6 +146,7 @@ public class GroupLogic extends AbstractAnyLogic<GroupTO, GroupCR, GroupUR> {
 
     @PreAuthorize("isAuthenticated() and not(hasRole('" + IdRepoEntitlement.ANONYMOUS + "'))")
     @Transactional(readOnly = true)
+    @Override
     public List<GroupTO> own() {
         if (securityProperties.getAdminUser().equals(AuthContextUtils.getUsername())) {
             return List.of();
@@ -186,6 +188,7 @@ public class GroupLogic extends AbstractAnyLogic<GroupTO, GroupCR, GroupUR> {
     }
 
     @PreAuthorize("hasRole('" + IdRepoEntitlement.GROUP_CREATE + "')")
+    @Override
     public ProvisioningResult<GroupTO> create(final GroupCR createReq, final boolean nullPriorityAsync) {
         BeforeResult<GroupCR> before = beforeCreate(createReq);
 
@@ -393,13 +396,15 @@ public class GroupLogic extends AbstractAnyLogic<GroupTO, GroupCR, GroupUR> {
     @PreAuthorize("hasRole('" + IdRepoEntitlement.TASK_CREATE + "') "
             + "and hasRole('" + IdRepoEntitlement.TASK_EXECUTE + "')")
     @Transactional
+    @Override
     public ExecTO provisionMembers(final String key, final ProvisionAction action) {
-        Group group = groupDAO.findById(key).orElseThrow(() -> new NotFoundException("Group " + key));
+        Group group = Optional.ofNullable(groupDAO.authFind(key)).
+                orElseThrow(() -> new NotFoundException("Group " + key));
 
         Implementation jobDelegate = implementationDAO.findById(
                 GroupMemberProvisionTaskJobDelegate.class.getSimpleName()).
                 orElseThrow(() -> new NotFoundException(
-                "Implementation " + GroupMemberProvisionTaskJobDelegate.class.getSimpleName()));
+                        "Implementation " + GroupMemberProvisionTaskJobDelegate.class.getSimpleName()));
 
         String name = (action == ProvisionAction.DEPROVISION ? "de" : "")
                 + "provision members of group " + group.getName();

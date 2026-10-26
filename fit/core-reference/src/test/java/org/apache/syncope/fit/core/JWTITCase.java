@@ -18,6 +18,7 @@
  */
 package org.apache.syncope.fit.core;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
@@ -47,12 +48,14 @@ import java.util.Date;
 import java.util.UUID;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.syncope.client.lib.SyncopeClient;
+import org.apache.syncope.common.keymaster.client.api.StandardConfParams;
 import org.apache.syncope.common.lib.SyncopeConstants;
 import org.apache.syncope.common.lib.request.UserCR;
 import org.apache.syncope.common.lib.to.UserTO;
 import org.apache.syncope.common.rest.api.RESTHeaders;
 import org.apache.syncope.common.rest.api.service.AccessTokenService;
 import org.apache.syncope.common.rest.api.service.UserSelfService;
+import org.apache.syncope.core.spring.security.SecurityProperties;
 import org.apache.syncope.core.spring.security.jws.AccessTokenJWSSigner;
 import org.apache.syncope.core.spring.security.jws.AccessTokenJWSVerifier;
 import org.apache.syncope.fit.AbstractITCase;
@@ -141,7 +144,7 @@ public class JWTITCase extends AbstractITCase {
             jwtUserSelfService.read();
             fail("Failure expected on a modified token");
         } catch (NotAuthorizedException e) {
-            assertEquals("Invalid signature found in JWT", e.getMessage());
+            assertEquals(SecurityProperties.AuthenticationErrorProperties.DEFAULT_GENERIC_MESSAGE, e.getMessage());
         }
     }
 
@@ -222,23 +225,21 @@ public class JWTITCase extends AbstractITCase {
     @Test
     public void expiredToken() throws ParseException, JOSEException {
         // Get an initial token
-        SyncopeClient localClient = CLIENT_FACTORY.create(ADMIN_UNAME, ADMIN_PWD);
+        UserCR userCR = UserITCase.getUniqueSample("expired@syncope.apache.org");
+        assertDoesNotThrow(() -> createUser(userCR));
+        SyncopeClient localClient = CLIENT_FACTORY.create(userCR.getUsername(), userCR.getPassword());
         AccessTokenService accessTokenService = localClient.getService(AccessTokenService.class);
 
         Response response = accessTokenService.login();
         String token = response.getHeaderString(RESTHeaders.TOKEN);
         assertNotNull(token);
         SignedJWT jwt = SignedJWT.parse(token);
-        String tokenId = jwt.getJWTClaimsSet().getJWTID();
 
         // Create a new token using the Id of the first token
         Date currentTime = new Date();
 
-        JWTClaimsSet.Builder claimsSet = new JWTClaimsSet.Builder().
-                jwtID(tokenId).
-                subject(ADMIN_UNAME).
+        JWTClaimsSet.Builder claimsSet = new JWTClaimsSet.Builder(jwt.getJWTClaimsSet()).
                 issueTime(currentTime).
-                issuer(JWT_ISSUER).
                 expirationTime(new Date(currentTime.getTime() - 5000L)).
                 notBeforeTime(currentTime);
         jwt = new SignedJWT(new JWSHeader(JWS_SIGNER.getJwsAlgorithm()), claimsSet.build());
@@ -483,10 +484,11 @@ public class JWTITCase extends AbstractITCase {
 
     @Test
     public void issueSYNCOPE1420() throws ParseException {
-        Long orig = confParamOps.get(SyncopeConstants.MASTER_DOMAIN, "jwt.lifetime.minutes", null, Long.class);
+        Long orig = confParamOps.get(
+                SyncopeConstants.MASTER_DOMAIN, StandardConfParams.JWT_LIFETIME_MINUTES, null, Long.class);
         try {
             // set for immediate JWT expiration
-            confParamOps.set(SyncopeConstants.MASTER_DOMAIN, "jwt.lifetime.minutes", 0);
+            confParamOps.set(SyncopeConstants.MASTER_DOMAIN, StandardConfParams.JWT_LIFETIME_MINUTES, 0);
 
             UserCR userCR = UserITCase.getUniqueSample("syncope164@syncope.apache.org");
             UserTO user = createUser(userCR).getEntity();
@@ -494,7 +496,7 @@ public class JWTITCase extends AbstractITCase {
 
             // login, get JWT with expiration
             SyncopeClient.JwtInfo jwtInfo =
-                    CLIENT_FACTORY.create(user.getUsername(), "password123").jwtInfo().orElseThrow();
+                    CLIENT_FACTORY.create(user.getUsername(), DEFAULT_PASSWORD).jwtInfo().orElseThrow();
 
             Date expiration = SignedJWT.parse(jwtInfo.value()).getJWTClaimsSet().getExpirationTime();
             assertNotNull(expiration);
@@ -512,10 +514,10 @@ public class JWTITCase extends AbstractITCase {
 
             // login again, get new JWT
             // (even if ExpiredAccessTokenCleanup did not run yet, as it is scheduled every 5 minutes)
-            String newJWT = CLIENT_FACTORY.create(user.getUsername(), "password123").jwtInfo().orElseThrow().value();
+            String newJWT = CLIENT_FACTORY.create(user.getUsername(), DEFAULT_PASSWORD).jwtInfo().orElseThrow().value();
             assertNotEquals(jwtInfo.value(), newJWT);
         } finally {
-            confParamOps.set(SyncopeConstants.MASTER_DOMAIN, "jwt.lifetime.minutes", orig);
+            confParamOps.set(SyncopeConstants.MASTER_DOMAIN, StandardConfParams.JWT_LIFETIME_MINUTES, orig);
         }
     }
 }

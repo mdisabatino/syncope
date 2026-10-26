@@ -20,8 +20,10 @@ package org.apache.syncope.core.logic;
 
 import static org.mockito.Mockito.mock;
 
+import javax.cache.Cache;
 import javax.cache.CacheManager;
 import javax.cache.Caching;
+import javax.cache.configuration.MutableConfiguration;
 import org.apache.syncope.common.keymaster.client.api.ConfParamOps;
 import org.apache.syncope.common.keymaster.client.api.DomainOps;
 import org.apache.syncope.common.keymaster.client.api.ServiceOps;
@@ -36,7 +38,10 @@ import org.apache.syncope.core.persistence.jpa.PersistenceContext;
 import org.apache.syncope.core.persistence.jpa.StartupDomainLoader;
 import org.apache.syncope.core.provisioning.api.ImplementationLookup;
 import org.apache.syncope.core.provisioning.java.ProvisioningContext;
+import org.apache.syncope.core.spring.security.AuthDataAccessor;
 import org.apache.syncope.core.spring.security.SecurityContext;
+import org.apache.syncope.core.spring.security.throttle.PasswordResetRequestThrottler;
+import org.apache.syncope.core.spring.security.throttle.ThrottlerAttempts;
 import org.apache.syncope.core.workflow.java.WorkflowContext;
 import org.springframework.boot.logging.LoggingSystem;
 import org.springframework.context.ConfigurableApplicationContext;
@@ -104,5 +109,15 @@ public class IdMLogicTestContext {
     @Bean
     public CacheManager cacheManager() {
         return Caching.getCachingProvider().getCacheManager();
+    }
+
+    @Bean
+    public AuthDataAccessor authDataAccessor() {
+        return mock(AuthDataAccessor.class);
+    }
+
+    @Bean(name = PasswordResetRequestThrottler.CACHE)
+    public Cache<String, ThrottlerAttempts> passwordResetRequestThrottlerCache(final CacheManager cacheManager) {
+        return cacheManager.createCache(PasswordResetRequestThrottler.CACHE, new MutableConfiguration<>());
     }
 }

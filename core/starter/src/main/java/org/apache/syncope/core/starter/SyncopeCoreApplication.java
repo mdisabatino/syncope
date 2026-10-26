@@ -20,8 +20,8 @@ package org.apache.syncope.core.starter;
 
 import java.util.Map;
 import org.apache.cxf.spring.boot.autoconfigure.openapi.OpenApiAutoConfiguration;
-import org.apache.syncope.common.keymaster.client.api.ConfParamOps;
 import org.apache.syncope.common.keymaster.client.api.DomainOps;
+import org.apache.syncope.common.keymaster.client.api.KeymasterProperties;
 import org.apache.syncope.common.keymaster.client.api.startstop.KeymasterStop;
 import org.apache.syncope.common.lib.info.SystemInfo;
 import org.apache.syncope.core.persistence.api.DomainHolder;
@@ -42,7 +42,6 @@ import org.apache.syncope.core.persistence.api.dao.UserDAO;
 import org.apache.syncope.core.provisioning.api.ConnIdBundleManager;
 import org.apache.syncope.core.provisioning.api.ConnectorManager;
 import org.apache.syncope.core.provisioning.api.ImplementationLookup;
-import org.apache.syncope.core.provisioning.api.data.ConnInstanceDataBinder;
 import org.apache.syncope.core.provisioning.java.job.SyncopeTaskScheduler;
 import org.apache.syncope.core.starter.actuate.DefaultSyncopeCoreInfoContributor;
 import org.apache.syncope.core.starter.actuate.DomainsHealthIndicator;
@@ -115,6 +114,11 @@ public class SyncopeCoreApplication extends SpringBootServletInitializer {
         return builder.properties(Map.of("spring.config.name", "core")).sources(SyncopeCoreApplication.class);
     }
 
+    @Bean
+    public ProductionModeChecker productionModeChecker() {
+        return new ProductionModeChecker();
+    }
+
     @ConditionalOnMissingBean
     @Bean
     public TaskExecutorUnloader taskExecutorUnloader(final ListableBeanFactory beanFactory) {
@@ -123,14 +127,16 @@ public class SyncopeCoreApplication extends SpringBootServletInitializer {
 
     @ConditionalOnMissingBean
     @Bean
-    public SyncopeCoreStart keymasterStart(final DomainHolder<?> domainHolder) {
-        return new SyncopeCoreStart(domainHolder);
+    public SyncopeCoreStart keymasterStart(
+            final DomainHolder<?> domainHolder,
+            final KeymasterProperties keymasterProps) {
+        return new SyncopeCoreStart(domainHolder, keymasterProps.isEnableAutoRegistration());
     }
 
     @ConditionalOnMissingBean
     @Bean
-    public KeymasterStop keymasterStop(final DomainHolder<?> domainHolder) {
-        return new SyncopeCoreStop(domainHolder);
+    public KeymasterStop keymasterStop(final DomainHolder<?> domainHolder, final KeymasterProperties keymasterProps) {
+        return new SyncopeCoreStop(domainHolder, keymasterProps.isEnableAutoRegistration());
     }
 
     @ConditionalOnMissingBean
@@ -148,7 +154,6 @@ public class SyncopeCoreApplication extends SpringBootServletInitializer {
             final TaskDAO taskDAO,
             final SecurityQuestionDAO securityQuestionDAO,
             final PersistenceInfoDAO persistenceInfoDAO,
-            final ConfParamOps confParamOps,
             final ConnIdBundleManager bundleManager,
             final ImplementationLookup implLookup) {
 
@@ -165,7 +170,6 @@ public class SyncopeCoreApplication extends SpringBootServletInitializer {
                 taskDAO,
                 securityQuestionDAO,
                 persistenceInfoDAO,
-                confParamOps,
                 bundleManager,
                 implLookup);
     }
@@ -188,10 +192,9 @@ public class SyncopeCoreApplication extends SpringBootServletInitializer {
     public ExternalResourcesHealthIndicator externalResourcesHealthIndicator(
             final DomainOps domainOps,
             final ExternalResourceDAO resourceDAO,
-            final ConnInstanceDataBinder connInstanceDataBinder,
             final ConnectorManager connectorManager) {
 
-        return new ExternalResourcesHealthIndicator(domainOps, resourceDAO, connInstanceDataBinder, connectorManager);
+        return new ExternalResourcesHealthIndicator(domainOps, resourceDAO, connectorManager);
     }
 
     @ConditionalOnMissingBean

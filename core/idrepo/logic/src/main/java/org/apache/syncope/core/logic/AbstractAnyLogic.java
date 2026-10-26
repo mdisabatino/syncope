@@ -35,16 +35,13 @@ import org.apache.syncope.common.lib.types.ClientExceptionType;
 import org.apache.syncope.core.logic.api.LogicActions;
 import org.apache.syncope.core.persistence.api.dao.AnyTypeDAO;
 import org.apache.syncope.core.persistence.api.dao.RealmSearchDAO;
-import org.apache.syncope.core.persistence.api.dao.search.SearchCond;
 import org.apache.syncope.core.persistence.api.entity.AnyType;
 import org.apache.syncope.core.persistence.api.entity.Realm;
 import org.apache.syncope.core.provisioning.api.jexl.TemplateUtils;
 import org.apache.syncope.core.spring.implementation.ImplementationManager;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.Pageable;
+import org.apache.syncope.core.spring.security.AuthContextUtils;
 
-public abstract class AbstractAnyLogic<TO extends AnyTO, C extends AnyCR, U extends AnyUR>
-        extends AbstractResourceAssociator<TO> {
+abstract class AbstractAnyLogic<TO extends AnyTO, C extends AnyCR, U extends AnyUR> extends AbstractLogic<TO> {
 
     protected record BeforeResult<T>(T key, List<LogicActions> actions) {
 
@@ -60,7 +57,7 @@ public abstract class AbstractAnyLogic<TO extends AnyTO, C extends AnyCR, U exte
 
     protected final Map<String, LogicActions> perContextActions = new ConcurrentHashMap<>();
 
-    public AbstractAnyLogic(
+    protected AbstractAnyLogic(
             final RealmSearchDAO realmSearchDAO,
             final AnyTypeDAO anyTypeDAO,
             final TemplateUtils templateUtils) {
@@ -76,7 +73,7 @@ public abstract class AbstractAnyLogic<TO extends AnyTO, C extends AnyCR, U exte
         realm.getActions().forEach(impl -> {
             try {
                 result.add(ImplementationManager.build(
-                        impl,
+                        AuthContextUtils.getDomain(), impl,
                         () -> perContextActions.get(impl.getKey()),
                         instance -> perContextActions.put(impl.getKey(), instance)));
             } catch (Exception e) {
@@ -87,7 +84,6 @@ public abstract class AbstractAnyLogic<TO extends AnyTO, C extends AnyCR, U exte
         return result;
     }
 
-    @SuppressWarnings("unchecked")
     protected BeforeResult<C> beforeCreate(final C input) {
         Realm realm = realmSearchDAO.findByFullPath(input.getRealm()).orElseThrow(() -> {
             SyncopeClientException sce = SyncopeClientException.build(ClientExceptionType.InvalidRealm);
@@ -124,7 +120,6 @@ public abstract class AbstractAnyLogic<TO extends AnyTO, C extends AnyCR, U exte
         return new BeforeResult<>(actionedCR, actions);
     }
 
-    @SuppressWarnings("unchecked")
     protected BeforeResult<U> beforeUpdate(final U input, final String realmPath) {
         Realm realm = realmSearchDAO.findByFullPath(realmPath).orElseThrow(() -> {
             SyncopeClientException sce = SyncopeClientException.build(ClientExceptionType.InvalidRealm);
@@ -144,7 +139,6 @@ public abstract class AbstractAnyLogic<TO extends AnyTO, C extends AnyCR, U exte
         return new BeforeResult<>(update, actions);
     }
 
-    @SuppressWarnings("unchecked")
     protected BeforeResult<TO> beforeDelete(final TO input) {
         Realm realm = realmSearchDAO.findByFullPath(input.getRealm()).orElseThrow(() -> {
             SyncopeClientException sce = SyncopeClientException.build(ClientExceptionType.InvalidRealm);
@@ -164,7 +158,6 @@ public abstract class AbstractAnyLogic<TO extends AnyTO, C extends AnyCR, U exte
         return new BeforeResult<>(any, actions);
     }
 
-    @SuppressWarnings("unchecked")
     protected ProvisioningResult<TO> afterCreate(
             final TO input, final List<PropagationStatus> statuses, final List<LogicActions> actions) {
 
@@ -199,7 +192,6 @@ public abstract class AbstractAnyLogic<TO extends AnyTO, C extends AnyCR, U exte
         return result;
     }
 
-    @SuppressWarnings("unchecked")
     protected ProvisioningResult<TO> afterDelete(
             final TO input, final List<PropagationStatus> statuses, final List<LogicActions> actions) {
 
@@ -215,17 +207,4 @@ public abstract class AbstractAnyLogic<TO extends AnyTO, C extends AnyCR, U exte
 
         return result;
     }
-
-    public abstract TO read(String key);
-
-    public abstract Page<TO> search(
-            SearchCond searchCond,
-            Pageable pageable,
-            String realm,
-            boolean recursive,
-            boolean details);
-
-    public abstract ProvisioningResult<TO> update(U updateReq, boolean nullPriorityAsync);
-
-    public abstract ProvisioningResult<TO> delete(String key, boolean nullPriorityAsync);
 }

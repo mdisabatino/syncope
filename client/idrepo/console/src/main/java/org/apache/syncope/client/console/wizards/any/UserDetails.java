@@ -20,11 +20,11 @@ package org.apache.syncope.client.console.wizards.any;
 
 import java.util.List;
 import org.apache.commons.lang3.Strings;
-import org.apache.syncope.client.console.rest.UserRestClient;
 import org.apache.syncope.client.ui.commons.Constants;
 import org.apache.syncope.client.ui.commons.ajax.markup.html.LabelInfo;
-import org.apache.syncope.client.ui.commons.markup.html.form.AjaxCheckBoxPanel;
 import org.apache.syncope.client.ui.commons.markup.html.form.AjaxTextFieldPanel;
+import org.apache.syncope.client.ui.commons.markup.html.form.AjaxTripleStateButtonPanel;
+import org.apache.syncope.client.ui.commons.rest.AnonymousRestClient;
 import org.apache.syncope.client.ui.commons.wicket.markup.html.bootstrap.tabs.Accordion;
 import org.apache.syncope.client.ui.commons.wizards.any.PasswordPanel;
 import org.apache.syncope.client.ui.commons.wizards.any.UserWrapper;
@@ -51,7 +51,7 @@ public class UserDetails extends Details<UserTO> {
     private static final long serialVersionUID = 6592027822510220463L;
 
     @SpringBean
-    protected UserRestClient restClient;
+    protected AnonymousRestClient anonymousRestClient;
 
     public UserDetails(
             final UserWrapper wrapper,
@@ -103,7 +103,7 @@ public class UserDetails extends Details<UserTO> {
                             resources(wrapper.getInnerObject().getResources()).
                             build();
                     try {
-                        restClient.compliance(quey);
+                        anonymousRestClient.compliance(quey);
                     } catch (Exception e) {
                         username.getField().error(e.getMessage());
                     }
@@ -115,8 +115,9 @@ public class UserDetails extends Details<UserTO> {
         // ------------------------
         // mustChangePassword
         // ------------------------
-        AjaxCheckBoxPanel mustChangePassword = new AjaxCheckBoxPanel(
+        AjaxTripleStateButtonPanel mustChangePassword = new AjaxTripleStateButtonPanel(
                 "mustChangePassword", "mustChangePassword", new PropertyModel<>(userTO, "mustChangePassword"));
+        mustChangePassword.addRequiredLabel();
 
         add(mustChangePassword.setOutputMarkupPlaceholderTag(true).setVisible(templateMode));
         // ------------------------
@@ -176,7 +177,7 @@ public class UserDetails extends Details<UserTO> {
             super(id);
             setOutputMarkupId(true);
             add(new Label("warning", new ResourceModel("password.change.warning")));
-            add(new PasswordPanel("passwordPanel", wrapper, false, templateMode, restClient));
+            add(new PasswordPanel("passwordPanel", wrapper, false, templateMode, null, anonymousRestClient));
         }
     }
 }

@@ -20,7 +20,6 @@ package org.apache.syncope.core.logic.saml2;
 
 import java.text.ParseException;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -54,6 +53,7 @@ import org.apache.syncope.core.provisioning.api.jexl.TemplateUtils;
 import org.apache.syncope.core.provisioning.java.pushpull.InboundMatcher;
 import org.apache.syncope.core.provisioning.java.utils.MappingUtils;
 import org.apache.syncope.core.spring.implementation.ImplementationManager;
+import org.apache.syncope.core.spring.security.AuthContextUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.transaction.annotation.Propagation;
@@ -61,9 +61,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 public class SAML2SP4UIUserManager {
 
-    private static final Logger LOG = LoggerFactory.getLogger(SAML2SP4UIUserManager.class);
+    protected static final Logger LOG = LoggerFactory.getLogger(SAML2SP4UIUserManager.class);
 
-    private static final String SAML2SP_CONTEXT = "SAML 2.0 SP";
+    public static final String SAML2SP_CONTEXT = "SAML 2.0 SP";
 
     protected final SAML2SP4UIIdPDAO idpDAO;
 
@@ -112,7 +112,7 @@ public class SAML2SP4UIUserManager {
         }
         if (idp.getConnObjectKeyItem().isEmpty()) {
             LOG.warn("Unable to determine conn object key item for  IdP: {}", idpKey);
-            return Collections.emptyList();
+            return List.of();
         }
         return inboundMatcher.matchByConnObjectKeyValue(
                 idp.getConnObjectKeyItem().get(), connObjectKeyValue, AnyTypeKind.USER, null, false).stream().
@@ -127,6 +127,7 @@ public class SAML2SP4UIUserManager {
         idp.getActions().forEach(impl -> {
             try {
                 result.add(ImplementationManager.build(
+                        AuthContextUtils.getDomain(),
                         impl,
                         () -> perContextActions.get(impl.getKey()),
                         instance -> perContextActions.put(impl.getKey(), instance)));
@@ -159,7 +160,9 @@ public class SAML2SP4UIUserManager {
                 values = samlAttr.get().getValues();
 
                 List<Object> transformed = new ArrayList<>(values);
-                for (ItemTransformer transformer : MappingUtils.getItemTransformers(item, getTransformers(item))) {
+                for (ItemTransformer transformer
+                        : MappingUtils.getItemTransformers(AuthContextUtils.getDomain(), item, getTransformers(item))) {
+
                     transformed = transformer.beforePull(null, userTO, transformed);
                 }
                 values.clear();

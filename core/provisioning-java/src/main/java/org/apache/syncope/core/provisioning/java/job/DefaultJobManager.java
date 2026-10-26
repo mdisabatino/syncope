@@ -25,6 +25,7 @@ import java.util.Map;
 import java.util.Set;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.syncope.common.keymaster.client.api.ConfParamOps;
+import org.apache.syncope.common.keymaster.client.api.StandardConfParams;
 import org.apache.syncope.common.lib.SyncopeConstants;
 import org.apache.syncope.common.lib.types.IdRepoImplementationType;
 import org.apache.syncope.common.lib.types.TaskType;
@@ -117,8 +118,8 @@ public class DefaultJobManager implements JobManager, SyncopeCoreLoader {
             final String cronExpression,
             final OffsetDateTime startAt) {
 
-        if (isRunning(context.getJobName())) {
-            LOG.debug("Job {} already running, cancel", context.getJobName());
+        if (isRunning(context.jobName())) {
+            LOG.debug("Job {} already running, cancel", context.jobName());
             return;
         }
 
@@ -175,10 +176,10 @@ public class DefaultJobManager implements JobManager, SyncopeCoreLoader {
                 JobNamer.getJobName(task),
                 executor,
                 dryRun);
-        context.getData().put(JobManager.TASK_TYPE, type);
-        context.getData().put(JobManager.TASK_KEY, task.getKey());
-        context.getData().put(JobManager.DELEGATE_IMPLEMENTATION, jobDelegate.getKey());
-        context.getData().putAll(jobData);
+        context.data().put(JobManager.TASK_TYPE, type);
+        context.data().put(JobManager.TASK_KEY, task.getKey());
+        context.data().put(JobManager.DELEGATE_IMPLEMENTATION, jobDelegate.getKey());
+        context.data().putAll(jobData);
 
         registerJob(
                 context,
@@ -238,8 +239,8 @@ public class DefaultJobManager implements JobManager, SyncopeCoreLoader {
                 JobNamer.getJobName(report),
                 executor,
                 dryRun);
-        context.getData().put(JobManager.REPORT_KEY, report.getKey());
-        context.getData().put(JobManager.DELEGATE_IMPLEMENTATION, report.getJobDelegate().getKey());
+        context.data().put(JobManager.REPORT_KEY, report.getKey());
+        context.data().put(JobManager.DELEGATE_IMPLEMENTATION, report.getJobDelegate().getKey());
 
         registerJob(
                 context,
@@ -351,7 +352,8 @@ public class DefaultJobManager implements JobManager, SyncopeCoreLoader {
                 String result = StringUtils.EMPTY;
 
                 String conf = confParamOps.get(
-                        SyncopeConstants.MASTER_DOMAIN, "notificationjob.cronExpression", null, String.class);
+                        SyncopeConstants.MASTER_DOMAIN,
+                        StandardConfParams.NOTIFICATION_JOB_CRON_EXPRESSION, null, String.class);
                 if (conf == null) {
                     result = NotificationJob.DEFAULT_CRON_EXP;
                 } else if (!StringUtils.EMPTY.equals(conf)) {

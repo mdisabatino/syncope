@@ -40,7 +40,6 @@ import java.util.Date;
 import java.util.List;
 import java.util.UUID;
 import org.apache.cxf.endpoint.Server;
-import org.apache.cxf.helpers.IOUtils;
 import org.apache.cxf.jaxrs.JAXRSServerFactoryBean;
 import org.apache.cxf.jaxrs.client.WebClient;
 import org.apache.cxf.jaxrs.ext.MessageContext;
@@ -65,7 +64,7 @@ import org.apache.syncope.common.lib.to.ProvisioningResult;
 import org.apache.syncope.common.rest.api.DateParamConverterProvider;
 import org.apache.syncope.common.rest.api.RESTHeaders;
 import org.apache.syncope.common.rest.api.service.AnyObjectService;
-import org.apache.syncope.core.logic.AnyObjectLogic;
+import org.apache.syncope.core.logic.AnyObjectLogicOp;
 import org.apache.syncope.core.persistence.api.dao.AnyObjectDAO;
 import org.apache.syncope.core.persistence.api.dao.search.SearchCond;
 import org.apache.syncope.core.persistence.api.search.AnySearchCondVisitor;
@@ -117,7 +116,7 @@ public class AnyObjectServiceTest {
         if (SERVER == null) {
             AnyObjectDAO anyObjectDAO = mock(AnyObjectDAO.class);
 
-            AnyObjectLogic logic = mock(AnyObjectLogic.class);
+            AnyObjectLogicOp logic = mock(AnyObjectLogicOp.class);
             when(logic.search(
                     any(SearchCond.class), any(Pageable.class), anyString(), anyBoolean(), anyBoolean())).
                     thenAnswer(ic -> {
@@ -223,7 +222,7 @@ public class AnyObjectServiceTest {
         InputStream in = (InputStream) response.getEntity();
 
         PagedResult<AnyObjectTO> list = new SyncopeJsonMapper().
-                readValue(IOUtils.toString(in), new TypeReference<>() {
+                readValue(in.readAllBytes(), new TypeReference<>() {
                 });
         checkList(list);
     }

@@ -24,7 +24,7 @@ under the License.
   <parent>
     <groupId>org.apache.syncope.ext</groupId>
     <artifactId>syncope-ext-openfga</artifactId>
-    <version>4.1.1-SNAPSHOT</version>
+    <version>4.1.4-SNAPSHOT</version>
   </parent>
 
   <name>Apache Syncope Ext: OpenFGA Client</name>
@@ -35,6 +35,7 @@ under the License.
   
   <properties>
     <skipTests>true</skipTests>
+    <skipITs>true</skipITs>
     <rootpom.basedir>${basedir}/../../..</rootpom.basedir>
   </properties>
 
@@ -89,6 +90,7 @@ under the License.
                 <useJakartaEe>true</useJakartaEe>
                 <openApiNullable>false</openApiNullable>
                 <sourceFolder>/</sourceFolder>
+                <hideGenerationTimestamp>true</hideGenerationTimestamp>
               </configOptions>
             </configuration>
           </execution>

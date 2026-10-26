@@ -30,7 +30,6 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.Strings;
-import org.apache.commons.lang3.tuple.Pair;
 import org.apache.commons.text.TextStringBuilder;
 import org.apache.syncope.common.lib.SyncopeClientException;
 import org.apache.syncope.common.lib.SyncopeConstants;
@@ -62,7 +61,6 @@ import org.apache.syncope.core.persistence.api.entity.EntityFactory;
 import org.apache.syncope.core.persistence.api.entity.PlainAttrValue;
 import org.apache.syncope.core.persistence.api.entity.PlainSchema;
 import org.apache.syncope.core.persistence.api.entity.Realm;
-import org.apache.syncope.core.persistence.api.utils.RealmUtils;
 import org.apache.syncope.core.persistence.common.dao.AbstractAnySearchDAO;
 import org.apache.syncope.core.persistence.neo4j.dao.repo.AnyRepoExt;
 import org.apache.syncope.core.persistence.neo4j.entity.AbstractAny;
@@ -87,10 +85,6 @@ import org.springframework.data.neo4j.core.Neo4jTemplate;
 import org.springframework.data.util.Streamable;
 
 public class Neo4jAnySearchDAO extends AbstractAnySearchDAO {
-
-    protected record AdminRealmsFilter(String filter, Set<Pair<AnyTypeKind, String>> managed) {
-
-    }
 
     protected record AnyCondQuery(String query, String field) {
 
@@ -128,7 +122,7 @@ public class Neo4jAnySearchDAO extends AbstractAnySearchDAO {
 
     protected static String escapeIfString(final String value, final boolean isStr) {
         return isStr
-                ? new StringBuilder().append('"').append(value).append('"').toString()
+                ? new StringBuilder().append('"').append(AnyRepoExt.escapeForLikeRegex(value)).append('"').toString()
                 : value;
     }
 
@@ -180,47 +174,19 @@ public class Neo4jAnySearchDAO extends AbstractAnySearchDAO {
         return clause.indexOf('*') != -1;
     }
 
-    protected String buildAdminRealmsFilter(
-            final Set<String> realmKeys,
-            final Map<String, Object> parameters) {
-
-        if (realmKeys.isEmpty()) {
-            return "(n)-[]-(:" + Neo4jRealm.NODE + ")";
-        }
-
-        return "(n)-[]-(r:" + Neo4jRealm.NODE + ") WHERE r.id IN $" + setParameter(parameters, realmKeys);
-    }
-
-    protected AdminRealmsFilter getAdminRealmsFilter(
+    protected AdminRealmsFilter<String> getAdminRealmsFilter(
             final Realm base,
             final boolean recursive,
             final Set<String> adminRealms,
             final Map<String, Object> parameters) {
 
-        Set<String> realmKeys = new HashSet<>();
-        Set<Pair<AnyTypeKind, String>> managed = new HashSet<>();
-
-        if (recursive) {
-            adminRealms.forEach(realmPath -> RealmUtils.ManagerRealm.of(realmPath).ifPresentOrElse(
-                    realm -> managed.add(Pair.of(realm.kind(), realm.anyKey())),
-                    () -> {
-                        Realm realm = realmSearchDAO.findByFullPath(realmPath).orElseThrow(() -> {
-                            SyncopeClientException noRealm =
-                                    SyncopeClientException.build(ClientExceptionType.InvalidRealm);
-                            noRealm.getElements().add("Invalid realm specified: " + realmPath);
-                            return noRealm;
-                        });
-
-                        realmKeys.addAll(realmSearchDAO.findDescendants(realm.getFullPath(), base.getFullPath()).
-                                stream().map(Realm::getKey).toList());
-                    }));
-        } else {
-            if (adminRealms.stream().anyMatch(r -> r.startsWith(base.getFullPath()))) {
-                realmKeys.add(base.getKey());
+        return processRealms(base, recursive, adminRealms, realmKeys -> {
+            if (realmKeys.isEmpty()) {
+                return "(n)-[]-(:" + Neo4jRealm.NODE + ")";
             }
-        }
 
-        return new AdminRealmsFilter(buildAdminRealmsFilter(realmKeys, parameters), managed);
+            return "(n)-[]-(r:" + Neo4jRealm.NODE + ") WHERE r.id IN $" + setParameter(parameters, realmKeys);
+        });
     }
 
     protected String getQuery(
@@ -609,7 +575,7 @@ public class Neo4jAnySearchDAO extends AbstractAnySearchDAO {
             if (!SyncopeConstants.UUID_PATTERN.matcher(cond.getExpression()).matches()) {
                 Realm realm = realmSearchDAO.findByFullPath(cond.getExpression()).
                         orElseThrow(() -> new IllegalArgumentException(
-                        "Invalid Realm full path: " + cond.getExpression()));
+                                "Invalid Realm full path: " + cond.getExpression()));
                 cond.setExpression(realm.getKey());
             }
 
@@ -800,7 +766,7 @@ public class Neo4jAnySearchDAO extends AbstractAnySearchDAO {
         Stream.concat(
                 queryInfo.fields().stream(),
                 orderBy.stream().filter(clause -> !"id".equals(clause.getProperty())
-                && anyUtils.getField(clause.getProperty()).isPresent()).map(Order::getProperty)).
+                        && anyUtils.getField(clause.getProperty()).isPresent()).map(Order::getProperty)).
                 distinct().forEach(field -> match.append(", n.").append(field).append(" AS ").append(field));
 
         // take plain schemas into account
@@ -910,7 +876,7 @@ public class Neo4jAnySearchDAO extends AbstractAnySearchDAO {
 
         Map<String, Object> parameters = new HashMap<>();
 
-        AdminRealmsFilter filter = getAdminRealmsFilter(base, recursive, adminRealms, parameters);
+        AdminRealmsFilter<String> filter = getAdminRealmsFilter(base, recursive, adminRealms, parameters);
 
         // 1. get the query string from the search condition
         QueryInfo queryInfo = getQuery(
@@ -979,7 +945,7 @@ public class Neo4jAnySearchDAO extends AbstractAnySearchDAO {
 
         Map<String, Object> parameters = new HashMap<>();
 
-        AdminRealmsFilter filter = getAdminRealmsFilter(base, recursive, adminRealms, parameters);
+        AdminRealmsFilter<String> filter = getAdminRealmsFilter(base, recursive, adminRealms, parameters);
 
         // 1. get the query string from the search condition
         QueryInfo queryInfo = getQuery(

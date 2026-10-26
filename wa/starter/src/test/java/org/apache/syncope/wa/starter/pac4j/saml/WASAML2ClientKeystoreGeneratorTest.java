@@ -21,10 +21,13 @@ package org.apache.syncope.wa.starter.pac4j.saml;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.condition.DisabledOnOs;
+import org.junit.jupiter.api.condition.OS;
 import org.pac4j.saml.metadata.keystore.SAML2KeystoreGenerator;
 
 public class WASAML2ClientKeystoreGeneratorTest extends BaseWASAML2ClientTest {
 
+    @DisabledOnOs(OS.MAC)
     @Test
     public void generate() throws Exception {
         SAML2KeystoreGenerator generator = new WASAML2ClientKeystoreGenerator(

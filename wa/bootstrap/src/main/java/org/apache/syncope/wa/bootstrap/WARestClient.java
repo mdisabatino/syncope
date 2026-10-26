@@ -23,7 +23,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
-import org.apache.syncope.client.lib.AnonymousAuthenticationHandler;
+import org.apache.syncope.client.lib.BasicAuthenticationHandler;
 import org.apache.syncope.client.lib.SyncopeClient;
 import org.apache.syncope.client.lib.SyncopeClientFactoryBean;
 import org.apache.syncope.common.keymaster.client.api.KeymasterException;
@@ -97,7 +97,7 @@ public class WARestClient {
                         client = new SyncopeClientFactoryBean().
                                 setAddress(core.getAddress()).
                                 setUseCompression(useGZIPCompression).
-                                create(new AnonymousAuthenticationHandler(anonymousUser, anonymousKey));
+                                create(new BasicAuthenticationHandler(anonymousUser, anonymousKey));
                     } catch (Exception e) {
                         LOG.error("Could not init SyncopeClient", e);
                     }
@@ -111,7 +111,7 @@ public class WARestClient {
     @SuppressWarnings("unchecked")
     public <T> T getService(final Class<T> serviceClass) {
         if (!isReady()) {
-            throw new IllegalStateException("Syncope core is not yet ready");
+            throw new IllegalStateException("Syncope Core is not yet ready");
         }
 
         T service;

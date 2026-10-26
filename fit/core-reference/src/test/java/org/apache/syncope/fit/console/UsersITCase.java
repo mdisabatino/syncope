@@ -511,7 +511,7 @@ public class UsersITCase extends AbstractConsoleITCase {
     }
 
     @Test
-    public void checkDeleteUsrLink() {
+    public void checkDeleteUserLink() {
         TESTER.clickLink(ANY_PAGE, false);
         TESTER.clickLink(USER_TAB);
 

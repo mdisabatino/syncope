@@ -24,7 +24,6 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 import org.apache.commons.jexl3.JexlBuilder;
 import org.apache.commons.jexl3.JexlEngine;
-import org.apache.commons.jexl3.introspection.JexlPermissions;
 import org.apache.syncope.common.keymaster.client.api.ConfParamOps;
 import org.apache.syncope.core.persistence.api.DomainHolder;
 import org.apache.syncope.core.persistence.api.EncryptorManager;
@@ -162,6 +161,7 @@ import org.apache.syncope.core.provisioning.java.pushpull.InboundMatcher;
 import org.apache.syncope.core.provisioning.java.pushpull.LiveSyncTaskSaver;
 import org.apache.syncope.core.provisioning.java.pushpull.OutboundMatcher;
 import org.apache.syncope.core.provisioning.java.utils.ConnObjectUtils;
+import org.apache.syncope.core.spring.security.AuthDataAccessor;
 import org.apache.syncope.core.spring.security.DefaultCredentialChecker;
 import org.apache.syncope.core.spring.security.PasswordGenerator;
 import org.apache.syncope.core.spring.security.SecurityProperties;
@@ -200,7 +200,7 @@ public class ProvisioningContext {
     public JexlTools jexlTools(final List<JexlFunctions> jexlFunctions) {
         JexlEngine jexlEngine = new JexlBuilder().
                 loader(new EmptyClassLoader()).
-                permissions(JexlPermissions.RESTRICTED.compose("java.time.*", "org.apache.syncope.*")).
+                permissions(JexlTools.DEFAULT_PERMISSIONS).
                 namespaces(jexlFunctions.stream().
                         collect(Collectors.toMap(JexlFunctions::getNamespace, Function.identity()))).
                 cache(512).
@@ -329,19 +329,13 @@ public class ProvisioningContext {
     public ConnectorManager connectorManager(
             final EntityFactory entityFactory,
             final ConnIdBundleManager connIdBundleManager,
-            final RealmDAO realmDAO,
-            final RealmSearchDAO realmSearchDAO,
             final ExternalResourceDAO resourceDAO,
-            final ConnInstanceDataBinder connInstanceDataBinder,
             final AsyncConnectorFacade asyncConnectorFacade,
             final ConfigurableApplicationContext ctx) {
 
         return new DefaultConnectorManager(
                 connIdBundleManager,
-                realmDAO,
-                realmSearchDAO,
                 resourceDAO,
-                connInstanceDataBinder,
                 asyncConnectorFacade,
                 entityFactory,
                 ctx);
@@ -505,6 +499,7 @@ public class ProvisioningContext {
             final TaskDataBinder taskDataBinder,
             final OutboundMatcher outboundMatcher,
             final PlainAttrValidationManager validator,
+            final AuthDataAccessor authDataAccessor,
             final ApplicationEventPublisher publisher) {
 
         return new PriorityPropagationTaskExecutor(
@@ -521,6 +516,7 @@ public class ProvisioningContext {
                 outboundMatcher,
                 validator,
                 publisher,
+                authDataAccessor,
                 propagationTaskExecutorAsyncExecutor);
     }
 

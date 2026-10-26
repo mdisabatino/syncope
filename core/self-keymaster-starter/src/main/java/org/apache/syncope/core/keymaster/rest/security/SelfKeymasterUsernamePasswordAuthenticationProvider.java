@@ -18,15 +18,16 @@
  */
 package org.apache.syncope.core.keymaster.rest.security;
 
+import javax.cache.Cache;
 import org.apache.syncope.common.keymaster.client.api.DomainOps;
 import org.apache.syncope.common.keymaster.client.api.KeymasterProperties;
 import org.apache.syncope.core.persistence.api.EncryptorManager;
 import org.apache.syncope.core.provisioning.api.UserProvisioningManager;
 import org.apache.syncope.core.spring.security.AuthDataAccessor;
-import org.apache.syncope.core.spring.security.DefaultCredentialChecker;
 import org.apache.syncope.core.spring.security.SecurityProperties;
 import org.apache.syncope.core.spring.security.SyncopeAuthenticationDetails;
 import org.apache.syncope.core.spring.security.UsernamePasswordAuthenticationProvider;
+import org.apache.syncope.core.spring.security.throttle.ThrottlerAttempts;
 import org.springframework.security.core.Authentication;
 
 public class SelfKeymasterUsernamePasswordAuthenticationProvider extends UsernamePasswordAuthenticationProvider {
@@ -37,12 +38,18 @@ public class SelfKeymasterUsernamePasswordAuthenticationProvider extends Usernam
             final DomainOps domainOps,
             final AuthDataAccessor dataAccessor,
             final UserProvisioningManager provisioningManager,
-            final DefaultCredentialChecker credentialChecker,
             final SecurityProperties securityProperties,
-            final KeymasterProperties keymasterProperties,
-            final EncryptorManager encryptorManager) {
+            final EncryptorManager encryptorManager,
+            final Cache<String, ThrottlerAttempts> authenticationAttemptCache,
+            final KeymasterProperties keymasterProperties) {
 
-        super(domainOps, dataAccessor, provisioningManager, credentialChecker, securityProperties, encryptorManager);
+        super(
+                domainOps,
+                dataAccessor,
+                provisioningManager,
+                securityProperties,
+                encryptorManager,
+                authenticationAttemptCache);
         this.keymasterProperties = keymasterProperties;
     }
 
@@ -50,10 +57,15 @@ public class SelfKeymasterUsernamePasswordAuthenticationProvider extends Usernam
     public Authentication authenticate(final Authentication authentication) {
         if (keymasterProperties.getUsername().equals(authentication.getName())) {
             return finalizeAuthentication(
-                    authentication.getCredentials().toString().equals(keymasterProperties.getPassword()),
                     SyncopeAuthenticationDetails.class.cast(authentication.getDetails()).getDomain(),
                     keymasterProperties.getUsername(),
-                    null,
+                    keymasterProperties.getUsername(),
+                    new AuthDataAccessor.UsernamePasswordAuthResult(
+                            null,
+                            authentication.getCredentials().toString().equals(keymasterProperties.getPassword()),
+                            null,
+                            null,
+                            dataAccessor.getAuthorities(authentication.getName(), null)),
                     authentication);
         }
 

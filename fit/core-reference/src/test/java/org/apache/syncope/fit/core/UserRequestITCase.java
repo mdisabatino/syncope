@@ -28,8 +28,8 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
 import jakarta.ws.rs.core.GenericType;
 import jakarta.ws.rs.core.MediaType;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
-import org.apache.cxf.helpers.IOUtils;
 import org.apache.cxf.jaxrs.client.WebClient;
 import org.apache.syncope.client.lib.SyncopeClient;
 import org.apache.syncope.common.lib.SyncopeClientException;
@@ -55,12 +55,15 @@ public class UserRequestITCase extends AbstractITCase {
         assumeTrue(IS_FLOWABLE_ENABLED);
 
         WebClient.client(BPMN_PROCESS_SERVICE).type(MediaType.APPLICATION_XML_TYPE);
-        BPMN_PROCESS_SERVICE.set("directorGroupRequest",
-                IOUtils.toString(UserRequestITCase.class.getResourceAsStream("/directorGroupRequest.bpmn20.xml")));
-        BPMN_PROCESS_SERVICE.set("assignPrinterRequest",
-                IOUtils.toString(UserRequestITCase.class.getResourceAsStream("/assignPrinterRequest.bpmn20.xml")));
-        BPMN_PROCESS_SERVICE.set("verifyAddedVariables",
-                IOUtils.toString(UserRequestITCase.class.getResourceAsStream("/verifyAddedVariables.bpmn20.xml")));
+        BPMN_PROCESS_SERVICE.set("directorGroupRequest", new String(
+                UserRequestITCase.class.getResourceAsStream("/directorGroupRequest.bpmn20.xml").readAllBytes(),
+                StandardCharsets.UTF_8));
+        BPMN_PROCESS_SERVICE.set("assignPrinterRequest", new String(
+                UserRequestITCase.class.getResourceAsStream("/assignPrinterRequest.bpmn20.xml").readAllBytes(),
+                StandardCharsets.UTF_8));
+        BPMN_PROCESS_SERVICE.set("verifyAddedVariables", new String(
+                UserRequestITCase.class.getResourceAsStream("/verifyAddedVariables.bpmn20.xml").readAllBytes(),
+                StandardCharsets.UTF_8));
     }
 
     @BeforeEach
@@ -82,7 +85,7 @@ public class UserRequestITCase extends AbstractITCase {
         assertEquals(req.getUsername(), user.getUsername());
 
         // check that user can see the ongoing request
-        SyncopeClient client = CLIENT_FACTORY.create(user.getUsername(), "password123");
+        SyncopeClient client = CLIENT_FACTORY.create(user.getUsername(), DEFAULT_PASSWORD);
         PagedResult<UserRequest> requests = client.getService(UserRequestService.class).
                 listRequests(new UserRequestQuery.Builder().user(user.getKey()).build());
         assertEquals(1, requests.getTotalCount());
@@ -191,7 +194,7 @@ public class UserRequestITCase extends AbstractITCase {
         List<RelationshipTO> relationships = USER_SERVICE.read(user.getKey()).getRelationships();
         assertTrue(relationships.isEmpty());
 
-        SyncopeClient client = CLIENT_FACTORY.create(user.getUsername(), "password123");
+        SyncopeClient client = CLIENT_FACTORY.create(user.getUsername(), DEFAULT_PASSWORD);
 
         // start request as user
         UserRequestService service = client.getService(UserRequestService.class);
@@ -262,7 +265,7 @@ public class UserRequestITCase extends AbstractITCase {
         UserTO user = createUser(UserITCase.getUniqueSample("addVariables@tirasa.net")).getEntity();
         assertNotNull(user);
 
-        SyncopeClient client = CLIENT_FACTORY.create(user.getUsername(), "password123");
+        SyncopeClient client = CLIENT_FACTORY.create(user.getUsername(), DEFAULT_PASSWORD);
 
         WorkflowTaskExecInput testInput = new WorkflowTaskExecInput();
         testInput.getVariables().put("providedVariable", "test");
@@ -300,8 +303,9 @@ public class UserRequestITCase extends AbstractITCase {
     public void invalid() throws IOException {
         WebClient.client(BPMN_PROCESS_SERVICE).type(MediaType.APPLICATION_XML_TYPE);
         try {
-            BPMN_PROCESS_SERVICE.set("invalid",
-                    IOUtils.toString(UserRequestITCase.class.getResourceAsStream("/invalidRequest.bpmn20.xml")));
+            BPMN_PROCESS_SERVICE.set("invalid", new String(
+                    UserRequestITCase.class.getResourceAsStream("/invalidRequest.bpmn20.xml").readAllBytes(),
+                    StandardCharsets.UTF_8));
             fail();
         } catch (SyncopeClientException e) {
             assertEquals(ClientExceptionType.Workflow, e.getType());

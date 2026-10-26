@@ -65,8 +65,8 @@ public final class EntityTOUtils {
 
     public static <A extends AnyTO, C extends AnyCR> void toAnyCR(final A anyTO, final C anyCR) {
         anyCR.setRealm(anyTO.getRealm());
-        anyCR.setUManager(anyTO.getUManager());
-        anyCR.setGManager(anyTO.getGManager());
+        anyCR.setuManager(anyTO.getuManager());
+        anyCR.setgManager(anyTO.getgManager());
         anyCR.getAuxClasses().addAll(anyTO.getAuxClasses());
         anyCR.getPlainAttrs().addAll(anyTO.getPlainAttrs());
         anyCR.getResources().addAll(anyTO.getResources());
@@ -76,7 +76,6 @@ public final class EntityTOUtils {
             userCR.setUsername(userTO.getUsername());
             userCR.setPassword(userTO.getPassword());
             userCR.setSecurityQuestion(userTO.getSecurityQuestion());
-            userCR.setSecurityAnswer(userTO.getSecurityAnswer());
             userCR.setMustChangePassword(userTO.isMustChangePassword());
             userCR.getMemberships().addAll(userTO.getMemberships());
             userCR.getRoles().addAll(userTO.getRoles());
@@ -92,8 +91,8 @@ public final class EntityTOUtils {
 
     public static <C extends AnyCR, A extends AnyTO> void toAnyTO(final C anyCR, final A anyTO) {
         anyTO.setRealm(anyCR.getRealm());
-        anyTO.setUManager(anyCR.getUManager());
-        anyTO.setGManager(anyCR.getGManager());
+        anyTO.setuManager(anyCR.getuManager());
+        anyTO.setgManager(anyCR.getgManager());
         anyTO.getAuxClasses().addAll(anyCR.getAuxClasses());
         anyTO.getPlainAttrs().addAll(anyCR.getPlainAttrs());
         anyTO.getResources().addAll(anyCR.getResources());
@@ -103,7 +102,6 @@ public final class EntityTOUtils {
             userTO.setUsername(userCR.getUsername());
             userTO.setPassword(userCR.getPassword());
             userTO.setSecurityQuestion(userCR.getSecurityQuestion());
-            userTO.setSecurityAnswer(userCR.getSecurityAnswer());
             userTO.setMustChangePassword(userCR.isMustChangePassword());
             userTO.getMemberships().addAll(userCR.getMemberships());
             userTO.getRoles().addAll(userCR.getRoles());

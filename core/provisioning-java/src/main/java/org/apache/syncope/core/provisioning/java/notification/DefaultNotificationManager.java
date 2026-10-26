@@ -33,6 +33,7 @@ import org.apache.commons.lang3.mutable.Mutable;
 import org.apache.commons.lang3.mutable.MutableObject;
 import org.apache.commons.lang3.tuple.Pair;
 import org.apache.syncope.common.keymaster.client.api.ConfParamOps;
+import org.apache.syncope.common.keymaster.client.api.StandardConfParams;
 import org.apache.syncope.common.lib.SyncopeConstants;
 import org.apache.syncope.common.lib.to.AnyObjectTO;
 import org.apache.syncope.common.lib.to.GroupTO;
@@ -81,6 +82,7 @@ import org.apache.syncope.core.spring.implementation.ImplementationManager;
 import org.apache.syncope.core.spring.security.AuthContextUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 @Transactional(rollbackFor = { Throwable.class })
@@ -169,7 +171,8 @@ public class DefaultNotificationManager implements NotificationManager {
     @Transactional(readOnly = true)
     @Override
     public long getMaxRetries() {
-        return confParamOps.get(SyncopeConstants.MASTER_DOMAIN, "notification.maxRetries", 0L, Long.class);
+        return confParamOps.get(
+                SyncopeConstants.MASTER_DOMAIN, StandardConfParams.NOTIFICATION_MAX_RETRIES, 0L, Long.class);
     }
 
     /**
@@ -215,6 +218,7 @@ public class DefaultNotificationManager implements NotificationManager {
         Optional.ofNullable(notification.getRecipientsProvider()).ifPresent(impl -> {
             try {
                 RecipientsProvider recipientsProvider = ImplementationManager.build(
+                        AuthContextUtils.getDomain(),
                         impl,
                         () -> perContextRecipientsProvider.orElse(null),
                         instance -> perContextRecipientsProvider = Optional.of(instance));
@@ -444,17 +448,22 @@ public class DefaultNotificationManager implements NotificationManager {
         return email;
     }
 
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     @Override
-    public TaskExec<NotificationTask> storeExec(final TaskExec<NotificationTask> execution) {
-        NotificationTask task = taskDAO.findById(TaskType.NOTIFICATION, execution.getTask().getKey()).
+    public TaskExec<NotificationTask> storeExec(final String taskKey, final TaskExec<NotificationTask> execution) {
+        NotificationTask task = taskDAO.findById(TaskType.NOTIFICATION, taskKey).
                 map(NotificationTask.class::cast).
                 orElseThrow(() -> new NotFoundException("NotificationTask " + execution.getTask().getKey()));
+        execution.setTask(task);
         task.add(execution);
         task.setExecuted(true);
         taskDAO.save(task);
+
+        execution.setTask(null);
         return execution;
     }
 
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     @Override
     public void setTaskExecuted(final String taskKey, final boolean executed) {
         NotificationTask task = taskDAO.findById(TaskType.NOTIFICATION, taskKey).

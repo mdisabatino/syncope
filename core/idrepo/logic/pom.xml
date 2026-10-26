@@ -24,7 +24,7 @@ under the License.
   <parent>
     <groupId>org.apache.syncope.core</groupId>
     <artifactId>syncope-core-idrepo</artifactId>
-    <version>4.1.1-SNAPSHOT</version>
+    <version>4.1.4-SNAPSHOT</version>
   </parent>
 
   <name>Apache Syncope Core IdRepo Logic</name>
@@ -45,11 +45,6 @@ under the License.
     <dependency>
       <groupId>org.springframework</groupId>
       <artifactId>spring-context-support</artifactId>
-    </dependency>
-
-    <dependency>
-      <groupId>org.apache.tika</groupId>
-      <artifactId>tika-core</artifactId>
     </dependency>
 
     <dependency>

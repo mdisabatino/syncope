@@ -20,7 +20,7 @@ package org.apache.syncope.client.console.notifications;
 
 import java.io.Serializable;
 import java.util.ArrayList;
-import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
@@ -40,9 +40,9 @@ import org.apache.syncope.client.console.rest.SchemaRestClient;
 import org.apache.syncope.client.console.wicket.markup.html.form.MultiPanel;
 import org.apache.syncope.client.console.wizards.BaseAjaxWizardBuilder;
 import org.apache.syncope.client.ui.commons.Constants;
-import org.apache.syncope.client.ui.commons.markup.html.form.AjaxCheckBoxPanel;
 import org.apache.syncope.client.ui.commons.markup.html.form.AjaxDropDownChoicePanel;
 import org.apache.syncope.client.ui.commons.markup.html.form.AjaxTextFieldPanel;
+import org.apache.syncope.client.ui.commons.markup.html.form.AjaxTripleStateButtonPanel;
 import org.apache.syncope.client.ui.commons.markup.html.form.MultiFieldPanel;
 import org.apache.syncope.common.lib.SyncopeClientException;
 import org.apache.syncope.common.lib.to.AnyTypeTO;
@@ -162,8 +162,9 @@ public class NotificationWizardBuilder extends BaseAjaxWizardBuilder<Notificatio
             traceLevel.addRequiredLabel();
             add(traceLevel);
 
-            final AjaxCheckBoxPanel isActive = new AjaxCheckBoxPanel("isActive",
+            final AjaxTripleStateButtonPanel isActive = new AjaxTripleStateButtonPanel("isActive",
                     getString("isActive"), new PropertyModel<>(notificationTO, "active"));
+            isActive.addRequiredLabel();
             if (createFlag) {
                 isActive.getField().setDefaultModelObject(Boolean.TRUE);
             }
@@ -387,8 +388,9 @@ public class NotificationWizardBuilder extends BaseAjaxWizardBuilder<Notificatio
             recipientsProvider.setChoices(recipientProviders.getObject());
             add(recipientsProvider);
 
-            AjaxCheckBoxPanel selfAsRecipient = new AjaxCheckBoxPanel("selfAsRecipient",
+            AjaxTripleStateButtonPanel selfAsRecipient = new AjaxTripleStateButtonPanel("selfAsRecipient",
                     getString("selfAsRecipient"), new PropertyModel<>(notificationTO, "selfAsRecipient"));
+            selfAsRecipient.addRequiredLabel();
             if (notificationTO.getKey() == null) {
                 selfAsRecipient.getField().setDefaultModelObject(Boolean.FALSE);
             }
@@ -415,7 +417,7 @@ public class NotificationWizardBuilder extends BaseAjaxWizardBuilder<Notificatio
         result.addAll(schemaRestClient.<DerSchemaTO>getSchemas(SchemaType.DERIVED, null, anyTypeClasses).
                 stream().map(DerSchemaTO::getKey).toList());
 
-        Collections.sort(result);
+        result.sort(Comparator.naturalOrder());
         return result;
     }
 }

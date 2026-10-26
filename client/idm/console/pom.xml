@@ -24,7 +24,7 @@ under the License.
   <parent>
     <groupId>org.apache.syncope.client</groupId>
     <artifactId>syncope-client-idm</artifactId>
-    <version>4.1.1-SNAPSHOT</version>
+    <version>4.1.4-SNAPSHOT</version>
   </parent>
 
   <name>Apache Syncope Client IdM Console</name>
@@ -69,6 +69,7 @@ under the License.
         <inherited>true</inherited>
         <configuration>
           <args>
+            <arg>--load-path=${rootpom.basedir}/client/idrepo/common-ui/src/main/resources/META-INF/resources/ui-commons/css</arg>
             <arg>${basedir}/src/main/resources/META-INF/resources/css:${project.build.outputDirectory}/META-INF/resources/css</arg>
           </args>
         </configuration>

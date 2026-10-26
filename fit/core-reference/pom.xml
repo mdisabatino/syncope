@@ -24,7 +24,7 @@ under the License.
   <parent>
     <groupId>org.apache.syncope</groupId>
     <artifactId>syncope-fit</artifactId>
-    <version>4.1.1-SNAPSHOT</version>
+    <version>4.1.4-SNAPSHOT</version>
   </parent>
 
   <name>Apache Syncope FIT Core Reference</name>
@@ -471,14 +471,9 @@ under the License.
                     <ports>
                       <port>2181:2181</port>
                     </ports>
-                    <volumes>
-                      <bind>
-                        <volume>${project.build.directory}/test-classes/zoo.cfg:/conf/zoo.cfg</volume>
-                        <volume>${project.build.directory}/test-classes/java.env:/conf/java.env</volume>
-                        <volume>${project.build.directory}/test-classes/server-jaas.conf:/conf/server-jaas.conf</volume>
-                        <volume>${project.build.directory}/test-classes/client-jaas.conf:/conf/client-jaas.conf</volume>
-                      </bind>
-                    </volumes>
+                    <env>
+                      <JVMFLAGS>-Dzookeeper.DigestAuthenticationProvider.superDigest=anonymous:NgPlLv4rbtJEAlVQcVR4CYocoRo=</JVMFLAGS>
+                    </env>
                   </run>
                 </image>
               </images>
@@ -1393,7 +1388,7 @@ under the License.
             <inherited>true</inherited>
             <configuration>
               <container>
-                <containerId>wildfly39x</containerId>
+                <containerId>wildfly41x</containerId>
                 <zipUrlInstaller>
                   <url>https://github.com/wildfly/wildfly/releases/download/${wildfly.version}/wildfly-${wildfly.version}.zip</url>
                   <downloadDir>${settings.localRepository}/org/codehaus/cargo/cargo-container-archives</downloadDir>
@@ -1707,7 +1702,7 @@ under the License.
             <artifactId>maven-failsafe-plugin</artifactId>
             <inherited>true</inherited>
             <configuration>
-              <skipTests>${skipTests}</skipTests>
+              <skipITs>${skipITs}</skipITs>
             </configuration>
           </plugin>
         </plugins>
@@ -1719,6 +1714,7 @@ under the License.
 
       <properties>
         <skipTests>true</skipTests>
+        <skipITs>true</skipITs>
       </properties>
 
       <build>
@@ -1749,6 +1745,7 @@ under the License.
       
       <properties>
         <skipTests>true</skipTests>
+        <skipITs>true</skipITs>
       </properties>
       
       <build>

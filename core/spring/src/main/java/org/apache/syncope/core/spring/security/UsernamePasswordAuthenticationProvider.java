@@ -18,8 +18,9 @@
  */
 package org.apache.syncope.core.spring.security;
 
+import java.util.Objects;
 import java.util.Optional;
-import org.apache.commons.lang3.BooleanUtils;
+import javax.cache.Cache;
 import org.apache.commons.lang3.mutable.Mutable;
 import org.apache.commons.lang3.mutable.MutableObject;
 import org.apache.syncope.common.keymaster.client.api.DomainOps;
@@ -30,12 +31,15 @@ import org.apache.syncope.common.lib.types.OpEvent;
 import org.apache.syncope.core.persistence.api.EncryptorManager;
 import org.apache.syncope.core.persistence.api.dao.NotFoundException;
 import org.apache.syncope.core.provisioning.api.UserProvisioningManager;
+import org.apache.syncope.core.spring.security.throttle.AuthenticationThrottler;
+import org.apache.syncope.core.spring.security.throttle.ThrottlerAttempts;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Configurable;
 import org.springframework.security.authentication.AuthenticationProvider;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.authentication.ott.InvalidOneTimeTokenException;
 import org.springframework.security.core.Authentication;
 
 @Configurable
@@ -49,39 +53,38 @@ public class UsernamePasswordAuthenticationProvider implements AuthenticationPro
 
     protected final UserProvisioningManager provisioningManager;
 
-    protected final DefaultCredentialChecker credentialChecker;
-
     protected final SecurityProperties securityProperties;
 
     protected final EncryptorManager encryptorManager;
+
+    protected final AuthenticationThrottler authenticationThrottler;
 
     public UsernamePasswordAuthenticationProvider(
             final DomainOps domainOps,
             final AuthDataAccessor dataAccessor,
             final UserProvisioningManager provisioningManager,
-            final DefaultCredentialChecker credentialChecker,
             final SecurityProperties securityProperties,
-            final EncryptorManager encryptorManager) {
+            final EncryptorManager encryptorManager,
+            final Cache<String, ThrottlerAttempts> authenticationThrottlerCache) {
 
         this.domainOps = domainOps;
         this.dataAccessor = dataAccessor;
         this.provisioningManager = provisioningManager;
-        this.credentialChecker = credentialChecker;
         this.securityProperties = securityProperties;
         this.encryptorManager = encryptorManager;
+        this.authenticationThrottler = new AuthenticationThrottler(securityProperties, authenticationThrottlerCache);
     }
 
     @Override
     public Authentication authenticate(final Authentication authentication) {
-        String domainKey;
-        Optional<Domain> domain;
-        if (SyncopeConstants.MASTER_DOMAIN.equals(
-                SyncopeAuthenticationDetails.class.cast(authentication.getDetails()).getDomain())) {
+        String domainKey = ((SyncopeAuthenticationDetails) authentication.getDetails()).getDomain();
+        String authenticatingPrincipal = Objects.requireNonNull(authentication.getPrincipal()).toString();
+        authenticationThrottler.checkAllowed(domainKey, authenticatingPrincipal);
 
-            domainKey = SyncopeConstants.MASTER_DOMAIN;
+        Optional<Domain> domain;
+        if (SyncopeConstants.MASTER_DOMAIN.equals(domainKey)) {
             domain = Optional.empty();
         } else {
-            domainKey = SyncopeAuthenticationDetails.class.cast(authentication.getDetails()).getDomain();
             try {
                 domain = Optional.of(domainOps.read(domainKey));
             } catch (NotFoundException | KeymasterException e) {
@@ -89,97 +92,79 @@ public class UsernamePasswordAuthenticationProvider implements AuthenticationPro
             }
         }
 
+        AuthDataAccessor.UsernamePasswordAuthResult authResult = AuthContextUtils.callAsAdmin(
+                domainKey,
+                () -> dataAccessor.authenticate(domain, authentication));
+
         Mutable<String> username = new MutableObject<>();
-        Boolean authenticated;
-        Mutable<String> delegationKey = new MutableObject<>();
+        if (authResult.user() != null) {
+            username.setValue(authResult.user().getUsername());
 
-        if (securityProperties.getAnonymousUser().equals(authentication.getName())) {
-            username.setValue(securityProperties.getAnonymousUser());
-            credentialChecker.checkIsDefaultAnonymousKeyInUse();
-            authenticated = authentication.getCredentials().toString().equals(securityProperties.getAnonymousKey());
-        } else if (securityProperties.getAdminUser().equals(authentication.getName())) {
-            username.setValue(securityProperties.getAdminUser());
-            if (SyncopeConstants.MASTER_DOMAIN.equals(domainKey)) {
-                credentialChecker.checkIsDefaultAdminPasswordInUse();
-                authenticated = encryptorManager.getInstance().verify(
-                        authentication.getCredentials().toString(),
-                        securityProperties.getAdminPasswordAlgorithm(),
-                        securityProperties.getAdminPassword());
-            } else if (domain.isPresent()) {
-                authenticated = encryptorManager.getInstance().verify(
-                        authentication.getCredentials().toString(),
-                        domain.get().getAdminCipherAlgorithm(),
-                        domain.get().getAdminPassword());
-            } else {
-                LOG.error("Could not read admin credentials for domain {}", domainKey);
-                authenticated = false;
+            if (!authResult.isSuccess()) {
+                AuthContextUtils.runAsAdmin(domainKey, () -> provisioningManager.internalSuspend(
+                        authResult.user().getKey(), securityProperties.getAdminUser(), "Failed authentication"));
             }
-        } else {
-            AuthDataAccessor.UsernamePasswordAuthResult authResult = AuthContextUtils.callAsAdmin(
-                    domainKey,
-                    () -> dataAccessor.authenticate(domainKey, authentication));
-            authenticated = authResult.authenticated();
-            if (authResult.user() != null && authResult.authenticated() != null) {
-                username.setValue(authResult.user().getUsername());
-
-                if (!authenticated) {
-                    AuthContextUtils.runAsAdmin(domainKey, () -> provisioningManager.internalSuspend(
-                            authResult.user().getKey(), securityProperties.getAdminUser(), "Failed authentication"));
-                }
-            }
-            delegationKey.setValue(authResult.delegationKey());
         }
+
         if (username.get() == null) {
-            username.setValue(authentication.getPrincipal().toString());
+            username.setValue(authenticatingPrincipal);
         }
 
         return finalizeAuthentication(
-                authenticated, domainKey, username.get(), delegationKey.get(), authentication);
+                domainKey,
+                authenticatingPrincipal,
+                username.get(),
+                authResult,
+                authentication);
     }
 
     protected Authentication finalizeAuthentication(
-            final Boolean authenticated,
             final String domain,
+            final String login,
             final String username,
-            final String delegationKey,
+            final AuthDataAccessor.UsernamePasswordAuthResult authResult,
             final Authentication authentication) {
 
-        UsernamePasswordAuthenticationToken token;
-        if (BooleanUtils.isTrue(authenticated)) {
-            token = AuthContextUtils.callAsAdmin(domain, () -> {
+        if (authResult.isSuccess()) {
+            authenticationThrottler.clearFailures(domain, login);
+            UsernamePasswordAuthenticationToken token = AuthContextUtils.callAsAdmin(domain, () -> {
                 UsernamePasswordAuthenticationToken upat = new UsernamePasswordAuthenticationToken(
                         username,
                         null,
-                        dataAccessor.getAuthorities(username, delegationKey));
+                        authResult.authorities());
                 upat.setDetails(authentication.getDetails());
                 dataAccessor.audit(
                         domain,
                         username,
-                        delegationKey,
+                        authResult.delegationKey(),
                         OpEvent.Outcome.SUCCESS,
                         true,
                         authentication,
-                        "Successfully authenticated, with entitlements: " + upat.getAuthorities());
+                        "Successfully authenticated, with entitlements: " + authResult.authorities());
                 return upat;
             });
 
-            LOG.debug("User {} successfully authenticated, with entitlements {}", username, token.getAuthorities());
-        } else {
-            dataAccessor.audit(
-                    domain,
-                    username,
-                    delegationKey,
-                    OpEvent.Outcome.FAILURE,
-                    false,
-                    authentication,
-                    "Not authenticated");
-
-            LOG.debug("User {} not authenticated", username);
-
-            throw new BadCredentialsException("User " + username + " not authenticated");
+            LOG.debug("User {} successfully authenticated, with entitlements {}", username, authResult.authorities());
+            return token;
         }
 
-        return token;
+        dataAccessor.audit(
+                domain,
+                username,
+                null,
+                OpEvent.Outcome.FAILURE,
+                false,
+                authentication,
+                "Not authenticated");
+
+        LOG.debug("User {} not authenticated", username);
+
+        authenticationThrottler.recordFailure(domain, login);
+
+        if (!authResult.passwordVerified()) {
+            throw new BadCredentialsException(username + ": invalid password provided");
+        }
+        throw new InvalidOneTimeTokenException(username + ": invalid OTP or recovery code provided");
     }
 
     @Override

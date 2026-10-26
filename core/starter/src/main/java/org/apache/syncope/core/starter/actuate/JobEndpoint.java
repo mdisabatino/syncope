@@ -59,9 +59,9 @@ public class JobEndpoint {
             Map<String, Object> job = new HashMap<>();
             jobs.put(k.job(), job);
 
-            job.put("executor", v.job().getContext().getExecutor());
-            job.put("dryRun", v.job().getContext().isDryRun());
-            job.put("context", v.job().getContext().getData());
+            job.put("executor", v.job().getContext().executor());
+            job.put("dryRun", v.job().getContext().dryRun());
+            job.put("context", v.job().getContext().data());
 
             v.instant().ifPresent(f -> job.put("delay (seconds)", f.getDelay(TimeUnit.SECONDS)));
 
@@ -79,7 +79,7 @@ public class JobEndpoint {
         status.keySet().forEach(domain -> {
             Set<JobStatus> jobStatuses = new HashSet<>(
                     AuthContextUtils.callAsAdmin(domain, () -> jobStatusDAO.findAll()));
-            jobStatuses.removeIf(syncopeTaskScheduler.getJobNames(domain)::contains);
+            jobStatuses.removeIf(s -> syncopeTaskScheduler.getJobNames(domain).contains(s.getKey()));
 
             if (!jobStatuses.isEmpty()) {
                 @SuppressWarnings("unchecked")

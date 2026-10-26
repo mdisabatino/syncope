@@ -23,10 +23,10 @@ import com.fasterxml.jackson.databind.json.JsonMapper;
 import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import org.apache.wicket.util.io.IOUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -45,7 +45,7 @@ public class MIMETypesLoader implements Serializable {
     public void load() {
         mimeTypesMap = new HashMap<>();
         try {
-            JsonNode jsonNode = MAPPER.readTree(IOUtils.toString(getClass().getResourceAsStream("/MIMETypes.json")));
+            JsonNode jsonNode = MAPPER.readTree(getClass().getResourceAsStream("/MIMETypes.json").readAllBytes());
             for (JsonNode node : jsonNode) {
                 JsonNode type = node.path("name");
                 JsonNode ext = node.path("extension");
@@ -58,7 +58,7 @@ public class MIMETypesLoader implements Serializable {
             LOG.debug("MIME types loaded: {}", mimeTypesMap);
 
             mimeTypes = new ArrayList<>(mimeTypesMap.keySet());
-            Collections.sort(mimeTypes);
+            mimeTypes.sort(Comparator.naturalOrder());
             mimeTypes = Collections.unmodifiableList(mimeTypes);
         } catch (Exception e) {
             LOG.error("Error reading file MIMETypes from resources", e);

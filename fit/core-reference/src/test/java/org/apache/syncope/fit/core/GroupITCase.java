@@ -47,6 +47,7 @@ import org.apache.syncope.common.lib.SyncopeClientException;
 import org.apache.syncope.common.lib.SyncopeConstants;
 import org.apache.syncope.common.lib.request.AnyObjectCR;
 import org.apache.syncope.common.lib.request.AttrPatch;
+import org.apache.syncope.common.lib.request.BooleanReplacePatchItem;
 import org.apache.syncope.common.lib.request.GroupCR;
 import org.apache.syncope.common.lib.request.GroupUR;
 import org.apache.syncope.common.lib.request.ResourceAR;
@@ -54,6 +55,7 @@ import org.apache.syncope.common.lib.request.ResourceDR;
 import org.apache.syncope.common.lib.request.StringPatchItem;
 import org.apache.syncope.common.lib.request.StringReplacePatchItem;
 import org.apache.syncope.common.lib.request.UserCR;
+import org.apache.syncope.common.lib.request.UserUR;
 import org.apache.syncope.common.lib.to.AnyObjectTO;
 import org.apache.syncope.common.lib.to.AnyTypeClassTO;
 import org.apache.syncope.common.lib.to.AnyTypeTO;
@@ -112,7 +114,7 @@ public class GroupITCase extends AbstractITCase {
     public void create() {
         // create group managed by f779c0d4-633b-4be5-8f57-32eb478a3ca5
         GroupCR groupCR = getSample("lastGroup");
-        groupCR.setGManager("f779c0d4-633b-4be5-8f57-32eb478a3ca5");
+        groupCR.setgManager("f779c0d4-633b-4be5-8f57-32eb478a3ca5");
 
         GroupTO groupTO = createGroup(groupCR).getEntity();
         assertNotNull(groupTO);
@@ -131,9 +133,9 @@ public class GroupITCase extends AbstractITCase {
         // remove group manager
         GroupUR groupUR = new GroupUR();
         groupUR.setKey(groupTO.getKey());
-        groupUR.setGManager(new StringReplacePatchItem.Builder().operation(PatchOperation.DELETE).build());
+        groupUR.setgManager(new StringReplacePatchItem.Builder().operation(PatchOperation.DELETE).build());
 
-        assertNull(updateGroup(groupUR).getEntity().getGManager());
+        assertNull(updateGroup(groupUR).getEntity().getgManager());
     }
 
     @Test
@@ -240,7 +242,7 @@ public class GroupITCase extends AbstractITCase {
     }
 
     @Test
-    public void updateAsGroupOwner() {
+    public void updateAsGroupManager() {
         // 1. read group as admin
         GroupTO groupTO = GROUP_SERVICE.read("ebf97068-aa4b-4a85-9f01-680e8c4cf227");
 
@@ -255,7 +257,9 @@ public class GroupITCase extends AbstractITCase {
         groupUR.setKey(groupTO.getKey());
         groupUR.setName(new StringReplacePatchItem.Builder().value("Director").build());
 
-        // 3. try to update as verdi, not owner of group 6 - fail
+        // 3. try to update as verdi, not manager of group - fail
+        updateUser(new UserUR.Builder("74cd8ece-715a-44a4-a736-e17b46c4e7e6").
+                mustChangePassword(new BooleanReplacePatchItem.Builder().value(false).build()).build());
         GroupService groupService2 = CLIENT_FACTORY.create("verdi", ADMIN_PWD).getService(GroupService.class);
 
         try {
@@ -265,7 +269,7 @@ public class GroupITCase extends AbstractITCase {
             assertNotNull(e);
         }
 
-        // 4. update as puccini, owner of group 6 - success
+        // 4. update as puccini, manager of group - success
         GroupService groupService3 = CLIENT_FACTORY.create("puccini", ADMIN_PWD).getService(GroupService.class);
 
         groupTO = groupService3.update(groupUR).readEntity(new GenericType<ProvisioningResult<GroupTO>>() {
@@ -634,7 +638,7 @@ public class GroupITCase extends AbstractITCase {
         assertEquals("testvalue", group.getPlainAttr(encrypted.getKey()).orElseThrow().getValues().getFirst());
 
         // 6. update schema again to disallow cleartext values
-        encrypted.setConversionPattern(null);
+        encrypted.setConversionPattern("${obscureSecretKey}");
         SCHEMA_SERVICE.update(SchemaType.PLAIN, encrypted);
 
         group = GROUP_SERVICE.read(group.getKey());

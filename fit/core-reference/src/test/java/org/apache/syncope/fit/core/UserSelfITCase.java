@@ -24,6 +24,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 import static org.junit.jupiter.api.Assumptions.assumeFalse;
@@ -32,12 +33,17 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
 import jakarta.ws.rs.ForbiddenException;
 import jakarta.ws.rs.core.GenericType;
 import jakarta.ws.rs.core.Response;
+import java.io.IOException;
+import java.io.InputStream;
 import java.util.List;
+import java.util.Optional;
+import java.util.Properties;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.syncope.client.lib.SyncopeClient;
+import org.apache.syncope.common.keymaster.client.api.StandardConfParams;
 import org.apache.syncope.common.lib.SyncopeClientException;
 import org.apache.syncope.common.lib.SyncopeConstants;
 import org.apache.syncope.common.lib.request.BooleanReplacePatchItem;
@@ -90,7 +96,8 @@ public class UserSelfITCase extends AbstractITCase {
 
     @Test
     public void selfRegistrationAllowed() {
-        assertTrue(ANONYMOUS_CLIENT.platform().isSelfRegAllowed());
+        assertTrue(confParamOps.get(
+                SyncopeConstants.MASTER_DOMAIN, StandardConfParams.SELF_REGISTRATION_ALLOWED, false, boolean.class));
     }
 
     @Test
@@ -205,7 +212,7 @@ public class UserSelfITCase extends AbstractITCase {
     @Test
     public void read() {
         UserTO user = createUser(UserITCase.getUniqueSample("selfread@syncope.apache.org")).getEntity();
-        UserService us2 = CLIENT_FACTORY.create(user.getUsername(), "password123").getService(UserService.class);
+        UserService us2 = CLIENT_FACTORY.create(user.getUsername(), DEFAULT_PASSWORD).getService(UserService.class);
         try {
             us2.read(user.getKey());
             fail("This should not happen");
@@ -213,7 +220,7 @@ public class UserSelfITCase extends AbstractITCase {
             assertNotNull(e);
         }
 
-        SyncopeClient.Self self = CLIENT_FACTORY.create(user.getUsername(), "password123").self();
+        SyncopeClient.Self self = CLIENT_FACTORY.create(user.getUsername(), DEFAULT_PASSWORD).self();
         assertEquals(user.getUsername(), self.user().getUsername());
     }
 
@@ -240,7 +247,7 @@ public class UserSelfITCase extends AbstractITCase {
         userUR.setKey(created.getKey());
         userUR.setUsername(new StringReplacePatchItem.Builder().value(created.getUsername() + "XX").build());
 
-        SyncopeClient authClient = CLIENT_FACTORY.create(created.getUsername(), "password123");
+        SyncopeClient authClient = CLIENT_FACTORY.create(created.getUsername(), DEFAULT_PASSWORD);
         UserTO updated = authClient.getService(UserSelfService.class).update(userUR).
                 readEntity(new GenericType<ProvisioningResult<UserTO>>() {
                 }).getEntity();
@@ -271,7 +278,7 @@ public class UserSelfITCase extends AbstractITCase {
         userUR.setPassword(new PasswordPatch.Builder().
                 value("newPassword123").onSyncope(false).resource(RESOURCE_NAME_TESTDB).build());
 
-        SyncopeClient authClient = CLIENT_FACTORY.create(created.getUsername(), "password123");
+        SyncopeClient authClient = CLIENT_FACTORY.create(created.getUsername(), DEFAULT_PASSWORD);
         UserTO updated = authClient.getService(UserSelfService.class).update(userUR).
                 readEntity(new GenericType<ProvisioningResult<UserTO>>() {
                 }).getEntity();
@@ -311,7 +318,7 @@ public class UserSelfITCase extends AbstractITCase {
         UserTO created = createUser(UserITCase.getUniqueSample("anonymous@syncope.apache.org")).getEntity();
         assertNotNull(created);
 
-        SyncopeClient authClient = CLIENT_FACTORY.create(created.getUsername(), "password123");
+        SyncopeClient authClient = CLIENT_FACTORY.create(created.getUsername(), DEFAULT_PASSWORD);
         UserTO deleted = authClient.getService(UserSelfService.class).delete().readEntity(
                 new GenericType<ProvisioningResult<UserTO>>() {
         }).getEntity();
@@ -323,7 +330,7 @@ public class UserSelfITCase extends AbstractITCase {
     @Test
     public void passwordReset() throws Exception {
         // 0. ensure that password request DOES require security question
-        confParamOps.set(SyncopeConstants.MASTER_DOMAIN, "passwordReset.securityQuestion", true);
+        confParamOps.set(SyncopeConstants.MASTER_DOMAIN, StandardConfParams.PASSWORD_RESET_SECURITY_QUESTION, true);
 
         // 1. create an user with security question and answer
         UserCR user = UserITCase.getUniqueSample("pwdReset@syncope.apache.org");
@@ -339,17 +346,17 @@ public class UserSelfITCase extends AbstractITCase {
         assertTrue(StringUtils.isNotBlank(pwdOnResource));
 
         // 2. verify that new user is able to authenticate
-        SyncopeClient authClient = CLIENT_FACTORY.create(user.getUsername(), "password123");
+        SyncopeClient authClient = CLIENT_FACTORY.create(user.getUsername(), DEFAULT_PASSWORD);
         UserTO read = authClient.self().user();
         assertNotNull(read);
 
         // 3. request password reset (as anonymous) providing the expected security answer
-        try {
-            ANONYMOUS_CLIENT.getService(UserSelfService.class).requestPasswordReset(user.getUsername(), "WRONG");
-            fail("This should not happen");
-        } catch (SyncopeClientException e) {
-            assertEquals(ClientExceptionType.InvalidSecurityAnswer, e.getType());
-        }
+        SyncopeClientException e = assertThrows(
+                SyncopeClientException.class,
+                () -> ANONYMOUS_CLIENT.getService(UserSelfService.class).
+                        requestPasswordReset(user.getUsername(), "WRONG"));
+        assertEquals(ClientExceptionType.InvalidSecurityAnswer, e.getType());
+
         ANONYMOUS_CLIENT.getService(UserSelfService.class).requestPasswordReset(user.getUsername(), "Rossi");
 
         if (IS_EXT_SEARCH_ENABLED) {
@@ -367,17 +374,17 @@ public class UserSelfITCase extends AbstractITCase {
         }
 
         String token = await().atMost(MAX_WAIT_SECONDS, TimeUnit.SECONDS).pollInterval(1, TimeUnit.SECONDS).until(
-                () -> USER_SERVICE.read(read.getKey()).getToken(),
+                () -> Optional.ofNullable(getToken(read.getKey()).get("token")).map(Object::toString).orElse(null),
                 StringUtils::isNotBlank);
 
         // 5. confirm password reset
-        try {
-            ANONYMOUS_CLIENT.getService(UserSelfService.class).confirmPasswordReset("WRONG TOKEN", "newPassword");
-            fail("This should not happen");
-        } catch (SyncopeClientException e) {
-            assertEquals(ClientExceptionType.NotFound, e.getType());
-            assertTrue(e.getMessage().contains("WRONG TOKEN"));
-        }
+        e = assertThrows(
+                SyncopeClientException.class,
+                () -> ANONYMOUS_CLIENT.getService(UserSelfService.class).
+                        confirmPasswordReset("WRONG TOKEN", "newPassword"));
+        assertEquals(ClientExceptionType.NotFound, e.getType());
+        assertFalse(e.getMessage().contains("WRONG TOKEN"));
+
         ANONYMOUS_CLIENT.getService(UserSelfService.class).confirmPasswordReset(token, "newPassword123");
 
         if (!IS_NEO4J_PERSISTENCE) {
@@ -385,8 +392,8 @@ public class UserSelfITCase extends AbstractITCase {
         }
 
         // 6. verify that password was reset and token removed
-        authClient = CLIENT_FACTORY.create(user.getUsername(), "newPassword123");
-        assertNull(authClient.self().user().getToken());
+        CLIENT_FACTORY.create(user.getUsername(), "newPassword123");
+        assertNull(Optional.ofNullable(getToken(read.getKey()).get("token")).map(Object::toString).orElse(null));
 
         // 7. verify that password was changed on external resource
         String newPwdOnResource = queryForObject(jdbcTemplate,
@@ -396,16 +403,43 @@ public class UserSelfITCase extends AbstractITCase {
     }
 
     @Test
+    public void passwordResetThrottle() {
+        String username = "missing-" + UUID.randomUUID() + "@syncope.apache.org";
+        UserSelfService userSelfService = ANONYMOUS_CLIENT.getService(UserSelfService.class);
+
+        int maxAttempts;
+        try (InputStream propStream = AbstractITCase.class.getResourceAsStream("/core.properties")) {
+            Properties props = new Properties();
+            props.load(propStream);
+            maxAttempts = Integer.parseInt(props.getProperty("security.passwordReset.throttle.maxAttempts", "5"));
+        } catch (IOException | NumberFormatException e) {
+            throw new IllegalStateException("Could not read password reset throttle max attempts from core.props", e);
+        }
+
+        for (int i = 0; i < maxAttempts; i++) {
+            SyncopeClientException e = assertThrows(
+                    SyncopeClientException.class,
+                    () -> userSelfService.requestPasswordReset(username, "answer"));
+            assertEquals(ClientExceptionType.NotFound, e.getType());
+        }
+
+        SyncopeClientException e = assertThrows(
+                SyncopeClientException.class,
+                () -> userSelfService.requestPasswordReset(username, "answer"));
+        assertEquals(Response.Status.TOO_MANY_REQUESTS, e.getType().getResponseStatus());
+    }
+
+    @Test
     public void passwordResetWithoutSecurityQuestion() {
         // 0. disable security question for password reset
-        confParamOps.set(SyncopeConstants.MASTER_DOMAIN, "passwordReset.securityQuestion", false);
+        confParamOps.set(SyncopeConstants.MASTER_DOMAIN, StandardConfParams.PASSWORD_RESET_SECURITY_QUESTION, false);
 
         // 1. create an user with security question and answer
         UserCR user = UserITCase.getUniqueSample("pwdResetNoSecurityQuestion@syncope.apache.org");
         createUser(user);
 
         // 2. verify that new user is able to authenticate
-        SyncopeClient authClient = CLIENT_FACTORY.create(user.getUsername(), "password123");
+        SyncopeClient authClient = CLIENT_FACTORY.create(user.getUsername(), DEFAULT_PASSWORD);
         UserTO read = authClient.self().user();
         assertNotNull(read);
 
@@ -413,27 +447,25 @@ public class UserSelfITCase extends AbstractITCase {
         ANONYMOUS_CLIENT.getService(UserSelfService.class).requestPasswordReset(user.getUsername(), null);
 
         // 4. get token (normally sent via e-mail, now reading as admin)
-        String token = USER_SERVICE.read(read.getKey()).getToken();
+        String token = Optional.ofNullable(getToken(read.getKey()).get("token")).map(Object::toString).orElse(null);
         assertNotNull(token);
 
         // 5. confirm password reset
-        try {
-            ANONYMOUS_CLIENT.getService(UserSelfService.class).confirmPasswordReset("WRONG TOKEN", "newPassword");
-            fail("This should not happen");
-        } catch (SyncopeClientException e) {
-            assertEquals(ClientExceptionType.NotFound, e.getType());
-            assertTrue(e.getMessage().contains("WRONG TOKEN"));
-        }
+        SyncopeClientException e = assertThrows(
+                SyncopeClientException.class,
+                () -> ANONYMOUS_CLIENT.getService(UserSelfService.class).
+                        confirmPasswordReset("WRONG TOKEN", "newPassword"));
+        assertEquals(ClientExceptionType.NotFound, e.getType());
+        assertFalse(e.getMessage().contains("WRONG TOKEN"));
+
         ANONYMOUS_CLIENT.getService(UserSelfService.class).confirmPasswordReset(token, "newPassword123");
 
         // 6. verify that password was reset and token removed
-        authClient = CLIENT_FACTORY.create(user.getUsername(), "newPassword123");
-        read = authClient.self().user();
-        assertNotNull(read);
-        assertNull(read.getToken());
+        CLIENT_FACTORY.create(user.getUsername(), "newPassword123");
+        assertNull(Optional.ofNullable(getToken(read.getKey()).get("token")).map(Object::toString).orElse(null));
 
         // 7. re-enable security question for password reset
-        confParamOps.set(SyncopeConstants.MASTER_DOMAIN, "passwordReset.securityQuestion", true);
+        confParamOps.set(SyncopeConstants.MASTER_DOMAIN, StandardConfParams.PASSWORD_RESET_SECURITY_QUESTION, true);
     }
 
     @Test
@@ -469,10 +501,10 @@ public class UserSelfITCase extends AbstractITCase {
 
         // 3. change password
         vivaldiClient.getService(UserSelfService.class).
-                mustChangePassword(new PasswordPatch.Builder().value("password123").build());
+                mustChangePassword(new PasswordPatch.Builder().value(DEFAULT_PASSWORD).build());
 
         // 4. verify it worked
-        SyncopeClient.Self self = CLIENT_FACTORY.create("vivaldi", "password123").self();
+        SyncopeClient.Self self = CLIENT_FACTORY.create("vivaldi", DEFAULT_PASSWORD).self();
         assertFalse(self.user().isMustChangePassword());
     }
 
@@ -657,7 +689,7 @@ public class UserSelfITCase extends AbstractITCase {
         req.setKey(created.getKey());
         req.getMemberships().add(new MembershipUR.Builder("b1f7c12d-ec83-441f-a50e-1691daaedf3b").build());
 
-        SyncopeClient client = CLIENT_FACTORY.create(created.getUsername(), "password123");
+        SyncopeClient client = CLIENT_FACTORY.create(created.getUsername(), DEFAULT_PASSWORD);
         Response response = client.getService(UserSelfService.class).update(req);
         assertEquals(Response.Status.OK.getStatusCode(), response.getStatus());
         assertEquals("updateApproval", USER_SERVICE.read(created.getKey()).getStatus());
@@ -774,5 +806,88 @@ public class UserSelfITCase extends AbstractITCase {
     public void issueSYNCOPE373() {
         UserTO userTO = ADMIN_CLIENT.self().user();
         assertEquals(ADMIN_UNAME, userTO.getUsername());
+    }
+
+    @Test
+    public void issueSYNCOPE1983Default() {
+        assumeFalse(IS_FLOWABLE_ENABLED);
+
+        // 1. create
+        UserCR userCR = UserITCase.getUniqueSample("issueSYNCOPE1983@syncope.apache.org");
+        userCR.getRoles().add("User manager");
+
+        SyncopeClientException e = assertThrows(
+                SyncopeClientException.class,
+                () -> ANONYMOUS_CLIENT.getService(UserSelfService.class).create(userCR));
+        assertEquals(ClientExceptionType.Workflow, e.getType());
+
+        // remove roles so self registration can proceed
+        userCR.getRoles().clear();
+
+        UserTO user = ANONYMOUS_CLIENT.getService(UserSelfService.class).
+                create(userCR).
+                readEntity(new GenericType<ProvisioningResult<UserTO>>() {
+                }).getEntity();
+        assertNotNull(user);
+
+        // 2. update
+        UserUR userUR = new UserUR.Builder(user.getKey()).
+                username(new StringReplacePatchItem.Builder().value(user.getUsername() + getUUIDString()).build()).
+                role(new StringPatchItem.Builder().value("User manager").build()).
+                build();
+
+        SyncopeClient authClient = CLIENT_FACTORY.create(user.getUsername(), DEFAULT_PASSWORD);
+        e = assertThrows(
+                SyncopeClientException.class,
+                () -> authClient.getService(UserSelfService.class).update(userUR));
+        assertEquals(ClientExceptionType.Workflow, e.getType());
+
+        // remove roles so update can proceed
+        userUR.getRoles().clear();
+
+        user = authClient.getService(UserSelfService.class).
+                update(userUR).
+                readEntity(new GenericType<ProvisioningResult<UserTO>>() {
+                }).getEntity();
+        assertNotNull(user);
+    }
+
+    @Test
+    public void issueSYNCOPE1983Flowable() {
+        assumeTrue(IS_FLOWABLE_ENABLED);
+
+        // 1. create
+        UserCR userCR = UserITCase.getUniqueSample("issueSYNCOPE1983@syncope.apache.org");
+        userCR.getRoles().add("User manager");
+
+        UserTO user = ANONYMOUS_CLIENT.getService(UserSelfService.class).
+                create(userCR).
+                readEntity(new GenericType<ProvisioningResult<UserTO>>() {
+                }).getEntity();
+        assertNotNull(user);
+        assertEquals("createApproval", user.getStatus());
+
+        // approve
+        UserRequestForm form = USER_REQUEST_SERVICE.listForms(
+                new UserRequestQuery.Builder().user(user.getKey()).build()).getResult().getFirst();
+        form = USER_REQUEST_SERVICE.claimForm(form.getTaskId());
+        form.getProperty("approveCreate").get().setValue(Boolean.TRUE.toString());
+        user = USER_REQUEST_SERVICE.submitForm(form).readEntity(new GenericType<ProvisioningResult<UserTO>>() {
+        }).getEntity();
+        assertNotNull(user);
+        assertEquals("active", user.getStatus());
+
+        // 2. update
+        UserUR userUR = new UserUR.Builder(user.getKey()).
+                username(new StringReplacePatchItem.Builder().value(user.getUsername() + getUUIDString()).build()).
+                role(new StringPatchItem.Builder().value("User manager").build()).
+                build();
+
+        SyncopeClient authClient = CLIENT_FACTORY.create(user.getUsername(), DEFAULT_PASSWORD);
+        user = authClient.getService(UserSelfService.class).
+                update(userUR).
+                readEntity(new GenericType<ProvisioningResult<UserTO>>() {
+                }).getEntity();
+        assertEquals("updateApproval", user.getStatus());
     }
 }

@@ -28,7 +28,7 @@ import org.apache.commons.lang3.BooleanUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.mutable.Mutable;
 import org.apache.commons.lang3.mutable.MutableObject;
-import org.apache.syncope.client.lib.AnonymousAuthenticationHandler;
+import org.apache.syncope.client.lib.BasicAuthenticationHandler;
 import org.apache.syncope.client.lib.SyncopeClient;
 import org.apache.syncope.client.lib.SyncopeClientFactoryBean;
 import org.apache.syncope.common.keymaster.client.api.ServiceOps;
@@ -127,7 +127,6 @@ public class RouteProvider {
         this.useGZIPCompression = useGZIPCompression;
     }
 
-    @SuppressWarnings("unchecked")
     protected GatewayFilter toFilter(final SRARouteTO route, final SRARouteFilter gwfilter)
             throws ClassNotFoundException, NumberFormatException {
 
@@ -138,21 +137,21 @@ public class RouteProvider {
                 String[] addRequestHeaderArgs = gwfilter.getArgs().split(",");
                 filter = ctx.getBean(AddRequestHeaderGatewayFilterFactory.class).
                         apply(c -> c.setName(addRequestHeaderArgs[0].trim()).
-                        setValue(addRequestHeaderArgs[1].trim()));
+                                setValue(addRequestHeaderArgs[1].trim()));
                 break;
 
             case ADD_REQUEST_PARAMETER:
                 String[] addRequestParameterArgs = gwfilter.getArgs().split(",");
                 filter = ctx.getBean(AddRequestParameterGatewayFilterFactory.class).
                         apply(c -> c.setName(addRequestParameterArgs[0].trim()).
-                        setValue(addRequestParameterArgs[1].trim()));
+                                setValue(addRequestParameterArgs[1].trim()));
                 break;
 
             case ADD_RESPONSE_HEADER:
                 String[] addResponseHeaderArgs = gwfilter.getArgs().split(",");
                 filter = ctx.getBean(AddResponseHeaderGatewayFilterFactory.class).
                         apply(c -> c.setName(addResponseHeaderArgs[0].trim()).
-                        setValue(addResponseHeaderArgs[1].trim()));
+                                setValue(addResponseHeaderArgs[1].trim()));
                 break;
 
             case DEDUPE_RESPONSE_HEADER:
@@ -190,7 +189,7 @@ public class RouteProvider {
                 String[] mapRequestHeaderArgs = gwfilter.getArgs().split(",");
                 filter = ctx.getBean(MapRequestHeaderGatewayFilterFactory.class).
                         apply(c -> c.setFromHeader(mapRequestHeaderArgs[0].trim()).
-                        setToHeader(mapRequestHeaderArgs[1].trim()));
+                                setToHeader(mapRequestHeaderArgs[1].trim()));
                 break;
 
             case PREFIX_PATH:
@@ -244,7 +243,7 @@ public class RouteProvider {
                 String[] rewritePathArgs = gwfilter.getArgs().split(",");
                 filter = ctx.getBean(RewritePathGatewayFilterFactory.class).
                         apply(c -> c.setRegexp(rewritePathArgs[0].trim()).
-                        setReplacement(rewritePathArgs[1].trim()));
+                                setReplacement(rewritePathArgs[1].trim()));
                 break;
 
             case REWRITE_LOCATION:
@@ -269,8 +268,8 @@ public class RouteProvider {
                 String[] rewriteResponseHeaderArgs = gwfilter.getArgs().split(",");
                 filter = ctx.getBean(RewriteResponseHeaderGatewayFilterFactory.class).
                         apply(c -> c.setReplacement(rewriteResponseHeaderArgs[2].trim()).
-                        setRegexp(rewriteResponseHeaderArgs[1].trim()).
-                        setName(rewriteResponseHeaderArgs[0].trim()));
+                                setRegexp(rewriteResponseHeaderArgs[1].trim()).
+                                setName(rewriteResponseHeaderArgs[0].trim()));
                 break;
 
             case RETRY:
@@ -304,14 +303,14 @@ public class RouteProvider {
                 String[] setRequestHeaderArgs = gwfilter.getArgs().split(",");
                 filter = ctx.getBean(SetRequestHeaderGatewayFilterFactory.class).
                         apply(c -> c.setName(setRequestHeaderArgs[0].trim()).
-                        setValue(setRequestHeaderArgs[1].trim()));
+                                setValue(setRequestHeaderArgs[1].trim()));
                 break;
 
             case SET_RESPONSE_HEADER:
                 String[] setResponseHeaderArgs = gwfilter.getArgs().split(",");
                 filter = ctx.getBean(SetResponseHeaderGatewayFilterFactory.class).
                         apply(c -> c.setName(setResponseHeaderArgs[0].trim()).
-                        setValue(setResponseHeaderArgs[1].trim()));
+                                setValue(setResponseHeaderArgs[1].trim()));
                 break;
 
             case SET_STATUS:
@@ -423,21 +422,21 @@ public class RouteProvider {
                 String[] betweenArgs = gwpredicate.getArgs().split(",");
                 predicate = ctx.getBean(BetweenRoutePredicateFactory.class).
                         applyAsync(c -> c.setDatetime1(ZonedDateTime.parse(betweenArgs[0].trim())).
-                        setDatetime2(ZonedDateTime.parse(betweenArgs[1].trim())));
+                                setDatetime2(ZonedDateTime.parse(betweenArgs[1].trim())));
                 break;
 
             case COOKIE:
                 String[] cookieArgs = gwpredicate.getArgs().split(",");
                 predicate = ctx.getBean(CookieRoutePredicateFactory.class).
                         applyAsync(c -> c.setName(cookieArgs[0].trim()).
-                        setRegexp(cookieArgs[1].trim()));
+                                setRegexp(cookieArgs[1].trim()));
                 break;
 
             case HEADER:
                 String[] headerArgs = gwpredicate.getArgs().split(",");
                 predicate = ctx.getBean(HeaderRoutePredicateFactory.class).
                         applyAsync(c -> c.setHeader(headerArgs[0].trim()).
-                        setRegexp(headerArgs[1].trim()));
+                                setRegexp(headerArgs[1].trim()));
                 break;
 
             case HOST:
@@ -449,8 +448,9 @@ public class RouteProvider {
             case METHOD:
                 String[] methodArgs = gwpredicate.getArgs().split(",");
                 predicate = ctx.getBean(MethodRoutePredicateFactory.class).
-                        applyAsync(c -> c.setMethods(
-                        Stream.of(methodArgs).map(arg -> HttpMethod.valueOf(arg.trim())).toArray(HttpMethod[]::new)));
+                        applyAsync(c -> c.setMethods(Stream.of(methodArgs).
+                                map(arg -> HttpMethod.valueOf(arg.trim())).
+                                toArray(HttpMethod[]::new)));
                 break;
 
             case PATH:
@@ -477,7 +477,7 @@ public class RouteProvider {
 
             case WEIGHT:
                 String[] weigthArgs = gwpredicate.getArgs().split(",");
-                Mutable<Integer> weight = new MutableObject<Integer>();
+                Mutable<Integer> weight = new MutableObject<>();
                 try {
                     weight.setValue(Integer.valueOf(weigthArgs[1].trim()));
                 } catch (NumberFormatException e) {
@@ -486,7 +486,7 @@ public class RouteProvider {
                 }
                 predicate = ctx.getBean(WeightRoutePredicateFactory.class).
                         applyAsync(c -> c.setGroup(weigthArgs[0].trim()).
-                        setWeight(weight.get()));
+                                setWeight(weight.get()));
                 break;
 
             case CUSTOM:
@@ -565,7 +565,7 @@ public class RouteProvider {
                     client = new SyncopeClientFactoryBean().
                             setAddress(serviceOps.get(NetworkService.Type.CORE).getAddress()).
                             setUseCompression(useGZIPCompression).
-                            create(new AnonymousAuthenticationHandler(anonymousUser, anonymousKey));
+                            create(new BasicAuthenticationHandler(anonymousUser, anonymousKey));
                 } catch (Exception e) {
                     LOG.error("Could not init SyncopeClient", e);
                     return List.of();

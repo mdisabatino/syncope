@@ -22,7 +22,7 @@ under the License.
   <parent>
     <groupId>org.apache.syncope.client</groupId>
     <artifactId>syncope-client-idrepo</artifactId>
-    <version>4.1.1-SNAPSHOT</version>
+    <version>4.1.4-SNAPSHOT</version>
   </parent>
  
   <name>Apache Syncope Client IdRepo Common UI</name>
@@ -154,6 +154,22 @@ under the License.
             </goals>
           </execution>
         </executions>
+      </plugin>
+
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-checkstyle-plugin</artifactId>
+      </plugin>
+
+      <plugin>
+        <groupId>org.gaul</groupId>
+        <artifactId>modernizer-maven-plugin</artifactId>
+        <configuration>
+          <exclusions>
+            <exclusion>java/util/Optional.get:()Ljava/lang/Object;</exclusion>
+            <exclusion>org/apache/commons/lang3/time/FastDateFormat.getInstance:(Ljava/lang/String;)Lorg/apache/commons/lang3/time/FastDateFormat;</exclusion>
+          </exclusions>
+        </configuration>
       </plugin>
     </plugins>
 

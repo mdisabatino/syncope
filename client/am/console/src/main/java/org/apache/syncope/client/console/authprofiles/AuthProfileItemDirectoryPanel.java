@@ -35,6 +35,7 @@ import org.apache.syncope.client.console.wicket.markup.html.form.ActionsPanel;
 import org.apache.syncope.client.ui.commons.Constants;
 import org.apache.syncope.client.ui.commons.pages.BaseWebPage;
 import org.apache.syncope.client.ui.commons.wizards.AjaxWizard;
+import org.apache.syncope.common.keymaster.client.api.ServiceOps;
 import org.apache.syncope.common.lib.BaseBean;
 import org.apache.syncope.common.lib.to.AuthProfileTO;
 import org.apache.syncope.common.lib.types.AMEntitlement;
@@ -60,9 +61,11 @@ public abstract class AuthProfileItemDirectoryPanel<I extends BaseBean>
 
     public AuthProfileItemDirectoryPanel(
             final String id,
+            final ServiceOps serviceOps,
             final AuthProfileRestClient restClient,
             final BaseModal<AuthProfileTO> authProfileModal,
             final AuthProfileTO authProfile,
+            final List<String> excluded,
             final PageReference pageRef) {
 
         super(id, restClient, pageRef, false);
@@ -75,6 +78,8 @@ public abstract class AuthProfileItemDirectoryPanel<I extends BaseBean>
         enableUtilityButton();
         setFooterVisibility(false);
 
+        addNewItemPanelBuilder(new AuthProfileItemWizardBuilder(excluded, serviceOps, restClient, pageRef), false);
+
         disableCheckBoxes();
         initResultTable();
     }
@@ -86,7 +91,6 @@ public abstract class AuthProfileItemDirectoryPanel<I extends BaseBean>
     protected abstract String sortProperty();
 
     @Override
-    @SuppressWarnings("unchecked")
     public void onEvent(final IEvent<?> event) {
         if (event.getPayload() instanceof ExitEvent exitEvent) {
             authProfileModal.close(exitEvent.getTarget());
@@ -179,8 +183,13 @@ public abstract class AuthProfileItemDirectoryPanel<I extends BaseBean>
 
         private static final long serialVersionUID = -7174537333960225216L;
 
-        protected AuthProfileItemWizardBuilder(final PageReference pageRef) {
-            super(defaultItem(), new StepModel<>(), pageRef);
+        protected AuthProfileItemWizardBuilder(
+                final List<String> excluded,
+                final ServiceOps serviceOps,
+                final AuthProfileRestClient authProfileRestClient,
+                final PageReference pageRef) {
+
+            super(defaultItem(), new StepModel<>(), excluded, serviceOps, authProfileRestClient, pageRef);
         }
 
         @Override

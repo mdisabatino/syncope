@@ -107,9 +107,9 @@ public class IdMLogicContext {
     @ConditionalOnMissingBean
     @Bean
     public RemediationLogic remediationLogic(
-            final UserLogic userLogic,
-            final GroupLogic groupLogic,
-            final AnyObjectLogic anyObjectLogic,
+            final UserLogicOp userLogic,
+            final GroupLogicOp groupLogic,
+            final AnyObjectLogicOp anyObjectLogic,
             final RemediationDataBinder binder,
             final RemediationDAO remediationDAO) {
 
@@ -124,7 +124,6 @@ public class IdMLogicContext {
             final AnyTypeDAO anyTypeDAO,
             final ExternalResourceDAO resourceDAO,
             final ConnInstanceDAO connInstanceDAO,
-            final ConnInstanceDataBinder connInstanceDataBinder,
             final ConnectorManager connectorManager,
             final OutboundMatcher outboundMatcher,
             final MappingManager mappingManager) {
@@ -134,7 +133,6 @@ public class IdMLogicContext {
                 anyTypeDAO,
                 connInstanceDAO,
                 resourceDataBinder,
-                connInstanceDataBinder,
                 outboundMatcher,
                 mappingManager,
                 connectorManager,
